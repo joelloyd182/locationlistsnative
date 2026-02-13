@@ -1,140 +1,275 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { syncStoresToCache } from '../services/geofencing';
+import { 
+  collection, 
+  doc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query, 
+  where,
+  arrayUnion,
+  arrayRemove,
+  Timestamp 
+} from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from './AuthContext';
+import { parseFirestoreError, showErrorAlert, withErrorHandling } from '../utils/errorHandling';
 
-type Store = {
+export type Store = {
   id: string;
   name: string;
-  address: string;
-  location: {
+  isOnline: boolean;  // NEW: Whether this is an online-only store
+  address?: string;   // Optional for online stores
+  location?: {        // Optional for online stores
     lat: number;
     lng: number;
   };
-  triggerRadius: number;
-  website?: string;
+  triggerRadius?: number;  // Optional for online stores
+  website?: string;   // Recommended for online stores
   items: Array<{
     id: string;
     text: string;
     checked: boolean;
   }>;
+  userId: string;
+  members?: string[];
+  placeId?: string;
+  phone?: string;
+  rating?: number;
+  openingHours?: string[];
+  photos?: string[];
 };
 
 type StoresContextType = {
   stores: Store[];
-  addStore: (store: Omit<Store, 'id'>) => void;
-  updateStore: (id: string, updates: Partial<Store>) => void;
-  deleteStore: (id: string) => void;
-  addItem: (storeId: string, text: string) => void;
-  toggleItem: (storeId: string, itemId: string) => void;
-  deleteItem: (storeId: string, itemId: string) => void;
+  loading: boolean;
+  error: string | null;
+  addStore: (store: Omit<Store, 'id' | 'userId'>) => Promise<boolean>;
+  updateStore: (id: string, updates: Partial<Store>) => Promise<boolean>;
+  deleteStore: (id: string) => Promise<boolean>;
+  addItem: (storeId: string, itemText: string) => Promise<boolean>;
+  addItems: (storeId: string, itemTexts: string[]) => Promise<boolean>;
+  toggleItem: (storeId: string, itemId: string) => Promise<boolean>;
+  deleteItem: (storeId: string, itemId: string) => Promise<boolean>;
 };
 
 const StoresContext = createContext<StoresContextType | undefined>(undefined);
 
 export function StoresProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load stores from storage on mount
   useEffect(() => {
-    loadStores();
-  }, []);
+    if (!user) {
+      setStores([]);
+      setLoading(false);
+      return;
+    }
 
-  // Save stores whenever they change
+    const storesRef = collection(db, 'stores');
+    const q = query(
+      storesRef,
+      where('members', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const storesData: Store[] = [];
+        snapshot.forEach((doc) => {
+          storesData.push({ id: doc.id, ...doc.data() } as Store);
+        });
+        setStores(storesData);
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('Firestore sync error:', err);
+        const appError = parseFirestoreError(err);
+        setError(appError.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Sync stores to AsyncStorage for geofencing (only physical stores)
   useEffect(() => {
-    saveStores();
+    if (stores.length > 0) {
+      // Filter to only physical stores for geofencing
+      const physicalStores = stores.filter(s => !s.isOnline);
+      syncStoresToCache(physicalStores);
+    }
   }, [stores]);
 
-  const loadStores = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('stores');
-      if (stored) {
-        setStores(JSON.parse(stored));
-      }
-    } catch (error) {
-      console.error('Failed to load stores:', error);
-    }
+  const addStore = async (storeData: Omit<Store, 'id' | 'userId'>): Promise<boolean> => {
+    if (!user) return false;
+
+    const result = await withErrorHandling(
+      async () => {
+        const docRef = await addDoc(collection(db, 'stores'), {
+          ...storeData,
+          userId: user.uid,
+          members: [user.uid],
+          createdAt: Timestamp.now(),
+        });
+        return docRef.id;
+      },
+      undefined,
+      () => addStore(storeData) // Retry function
+    );
+
+    return result !== null;
   };
 
-  const saveStores = async () => {
-    try {
-      await AsyncStorage.setItem('stores', JSON.stringify(stores));
-    } catch (error) {
-      console.error('Failed to save stores:', error);
-    }
+  const updateStore = async (id: string, updates: Partial<Store>): Promise<boolean> => {
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', id);
+        await updateDoc(storeRef, {
+          ...updates,
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => updateStore(id, updates) // Retry function
+    );
+
+    return result !== null;
   };
 
-  const addStore = (store: Omit<Store, 'id'>) => {
-    const newStore: Store = {
-      ...store,
-      id: Date.now().toString(),
-    };
-    setStores([...stores, newStore]);
+  const deleteStore = async (id: string): Promise<boolean> => {
+    const result = await withErrorHandling(
+      async () => {
+        await deleteDoc(doc(db, 'stores', id));
+        return true;
+      },
+      undefined,
+      () => deleteStore(id) // Retry function
+    );
+
+    return result !== null;
   };
 
-  const updateStore = (id: string, updates: Partial<Store>) => {
-    setStores(stores.map(store => 
-      store.id === id ? { ...store, ...updates } : store
-    ));
-  };
-
-  const deleteStore = (id: string) => {
-    setStores(stores.filter(store => store.id !== id));
-  };
-
-  const addItem = (storeId: string, text: string) => {
-    setStores(stores.map(store => {
-      if (store.id === storeId) {
-        return {
-          ...store,
-          items: [
-            ...store.items,
-            {
-              id: Date.now().toString(),
-              text,
-              checked: false,
-            }
-          ]
+  const addItem = async (storeId: string, itemText: string): Promise<boolean> => {
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        const newItem = {
+          id: Date.now().toString(),
+          text: itemText,
+          checked: false,
         };
-      }
-      return store;
-    }));
+        
+        await updateDoc(storeRef, {
+          items: arrayUnion(newItem),
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => addItem(storeId, itemText) // Retry function
+    );
+
+    return result !== null;
   };
 
-  const toggleItem = (storeId: string, itemId: string) => {
-    setStores(stores.map(store => {
-      if (store.id === storeId) {
-        return {
-          ...store,
-          items: store.items.map(item =>
-            item.id === itemId ? { ...item, checked: !item.checked } : item
-          )
-        };
-      }
-      return store;
-    }));
+  const addItems = async (storeId: string, itemTexts: string[]): Promise<boolean> => {
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        const newItems = itemTexts.map(text => ({
+          id: `${Date.now()}-${Math.random()}`,
+          text,
+          checked: false,
+        }));
+        
+        await updateDoc(storeRef, {
+          items: arrayUnion(...newItems),
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => addItems(storeId, itemTexts) // Retry function
+    );
+
+    return result !== null;
   };
 
-  const deleteItem = (storeId: string, itemId: string) => {
-    setStores(stores.map(store => {
-      if (store.id === storeId) {
-        return {
-          ...store,
-          items: store.items.filter(item => item.id !== itemId)
-        };
-      }
-      return store;
-    }));
+  const toggleItem = async (storeId: string, itemId: string): Promise<boolean> => {
+    const store = stores.find(s => s.id === storeId);
+    if (!store) return false;
+
+    const item = store.items.find(i => i.id === itemId);
+    if (!item) return false;
+
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        const updatedItem = { ...item, checked: !item.checked };
+        
+        await updateDoc(storeRef, {
+          items: arrayRemove(item),
+        });
+        
+        await updateDoc(storeRef, {
+          items: arrayUnion(updatedItem),
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => toggleItem(storeId, itemId) // Retry function
+    );
+
+    return result !== null;
+  };
+
+  const deleteItem = async (storeId: string, itemId: string): Promise<boolean> => {
+    const store = stores.find(s => s.id === storeId);
+    if (!store) return false;
+
+    const item = store.items.find(i => i.id === itemId);
+    if (!item) return false;
+
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        await updateDoc(storeRef, {
+          items: arrayRemove(item),
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => deleteItem(storeId, itemId) // Retry function
+    );
+
+    return result !== null;
   };
 
   return (
-    <StoresContext.Provider value={{
-      stores,
-      addStore,
-      updateStore,
-      deleteStore,
-      addItem,
-      toggleItem,
-      deleteItem,
-    }}>
+    <StoresContext.Provider 
+      value={{ 
+        stores, 
+        loading, 
+        error,
+        addStore, 
+        updateStore, 
+        deleteStore, 
+        addItem,
+        addItems,
+        toggleItem, 
+        deleteItem 
+      }}
+    >
       {children}
     </StoresContext.Provider>
   );
@@ -142,8 +277,8 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
 
 export function useStores() {
   const context = useContext(StoresContext);
-  if (!context) {
-    throw new Error('useStores must be used within StoresProvider');
+  if (context === undefined) {
+    throw new Error('useStores must be used within a StoresProvider');
   }
   return context;
 }

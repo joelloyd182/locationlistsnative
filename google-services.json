@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "133244555401",
+    "project_id": "location-lists-1e91c",
+    "storage_bucket": "location-lists-1e91c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:133244555401:android:d3c9599ee5862c9981f658",
+        "android_client_info": {
+          "package_name": "com.kookyrooster.locationlists"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "133244555401-956e370ae9g3p3mbm87pb5tjv1f6frla.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kookyrooster.locationlists",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "133244555401-knj5uuquj8bn30438n58nuaiu6uak9jg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kookyrooster.locationlists",
+            "certificate_hash": "c236fcb9f42ce17e68b7a15b75d309c3c78e3e40"
+          }
+        },
+        {
+          "client_id": "133244555401-4iekvf165g7a1h227udp7ig5pt9l2cpk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD8t3R9g47TxtahpcXReXUFJXiRw1V_yDU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "133244555401-4iekvf165g7a1h227udp7ig5pt9l2cpk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

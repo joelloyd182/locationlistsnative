@@ -1,22 +1,24 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { StoresProvider } from '../context/StoresContext';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function TabLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#FF6B6B',
-        tabBarInactiveTintColor: '#8B7371',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textLight,
         tabBarStyle: {
-          backgroundColor: '#FFF8F3',
-          borderTopColor: '#FFE1D6',
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
           borderTopWidth: 2,
         },
         headerStyle: {
-          backgroundColor: '#FFF8F3',
+          backgroundColor: colors.card,
         },
-        headerTintColor: '#FF6B6B',
+        headerTintColor: colors.primary,
       }}
     >
       <Tabs.Screen
@@ -43,6 +45,24 @@ export default function TabLayout() {
           title: 'Map',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="map" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="meals"
+        options={{
+          title: 'Meals',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="restaurant" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings" size={size} color={color} />
           ),
         }}
       />
