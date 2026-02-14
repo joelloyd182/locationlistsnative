@@ -7,12 +7,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import StoreLogo from '../../components/StoreLogo';
+import PageHeader from '../../components/PageHeader';
 
 export default function StoresScreen() {
   const router = useRouter();
   const { stores } = useStores();
   const { colors } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'physical' | 'online'>('all');
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -20,7 +22,13 @@ export default function StoresScreen() {
     setRefreshing(false);
   };
 
-  const sortedStores = [...stores].sort((a, b) => {
+  const filteredStores = stores.filter(s => {
+    if (filter === 'physical') return !s.isOnline;
+    if (filter === 'online') return s.isOnline;
+    return true;
+  });
+
+  const sortedStores = [...filteredStores].sort((a, b) => {
     const aPending = a.items.filter(i => !i.checked).length;
     const bPending = b.items.filter(i => !i.checked).length;
     // Stores with pending items first, then alphabetical
@@ -47,24 +55,57 @@ export default function StoresScreen() {
           stores.length === 0 && styles.emptyListContent,
         ]}
         ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <View>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>Your Stores</Text>
-              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-                {stores.length} store{stores.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/add-store');
+          <View>
+            <PageHeader
+              title="Stores"
+              subtitle={`${filteredStores.length} store${filteredStores.length !== 1 ? 's' : ''}${filter !== 'all' ? ` · ${filter}` : ''}`}
+              rightAction={{
+                icon: 'add',
+                label: 'Add Store',
+                onPress: () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push('/add-store');
+                },
               }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={20} color={colors.textInverse} />
-              <Text style={[styles.addButtonText, { color: colors.textInverse }]}>Add Store</Text>
-            </TouchableOpacity>
+            />
+
+            {/* Filter chips */}
+            <View style={styles.filterRow}>
+              {([
+                { key: 'all', label: 'All', icon: 'grid-outline' },
+                { key: 'physical', label: 'Physical', icon: 'storefront-outline' },
+                { key: 'online', label: 'Online', icon: 'globe-outline' },
+              ] as const).map(f => {
+                const isActive = filter === f.key;
+                return (
+                  <TouchableOpacity
+                    key={f.key}
+                    style={[
+                      styles.filterChip,
+                      { borderColor: colors.border },
+                      isActive && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setFilter(f.key);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons 
+                      name={f.icon as any} 
+                      size={14} 
+                      color={isActive ? colors.textInverse : colors.textSecondary} 
+                    />
+                    <Text style={[
+                      styles.filterChipText,
+                      { color: isActive ? colors.textInverse : colors.textSecondary },
+                    ]}>
+                      {f.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         }
         renderItem={({ item: store, index }) => {
@@ -216,7 +257,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.lg,
     paddingBottom: 100,
   },
   emptyListContent: {
@@ -251,10 +291,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  // ── Filter Chips ──────────────────────────────
+  filterRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+
   // ── Store Card ─────────────────────────────────
   storeCard: {
     borderRadius: radius.lg,
     marginBottom: spacing.md,
+    marginHorizontal: spacing.lg,
     padding: spacing.lg,
   },
   storeCardBody: {

@@ -8,7 +8,13 @@ export type ThemeId =
   | 'forest' 
   | 'sunset' 
   | 'slate' 
-  | 'berry';
+  | 'berry'
+  | 'storm'
+  | 'espresso'
+  | 'arctic'
+  | 'volcanic'
+  | 'lavender'
+  | 'copper';
 
 type Theme = {
   primary: string;
@@ -292,6 +298,162 @@ export const THEMES: Record<ThemeId, Theme> = {
     overlay: 'rgba(131,24,67,0.4)',
     gradient: ['#DB2777', '#BE185D'],
   },
+
+  storm: {
+    primary: '#6B7280',       // Cool gray
+    primaryLight: '#9CA3AF',
+    primaryDark: '#4B5563',
+    secondary: '#3B82F6',     // Blue flash
+    accent: '#F59E0B',        // Lightning gold
+    background: '#111827',    // Dark charcoal
+    surface: '#1F2937',
+    surfaceAlt: '#374151',
+    border: '#374151',
+    borderLight: '#1F2937',
+    text: '#F9FAFB',
+    textSecondary: '#D1D5DB',
+    textMuted: '#9CA3AF',
+    textInverse: '#FFFFFF',
+    success: '#34D399',
+    successLight: '#34D39920',
+    error: '#F87171',
+    errorLight: '#F8717120',
+    warning: '#FBBF24',
+    warningLight: '#FBBF2420',
+    shadow: '#000000',
+    overlay: 'rgba(0,0,0,0.6)',
+    gradient: ['#4B5563', '#374151'],
+  },
+
+  espresso: {
+    primary: '#92400E',       // Rich brown
+    primaryLight: '#B45309',
+    primaryDark: '#78350F',
+    secondary: '#D97706',     // Amber
+    accent: '#059669',        // Green accent
+    background: '#FFFBF5',    // Warm cream
+    surface: '#FFFFFF',
+    surfaceAlt: '#FEF3E2',
+    border: '#E8D5B7',
+    borderLight: '#F5EBD9',
+    text: '#3C2415',
+    textSecondary: '#78563A',
+    textMuted: '#A68B6B',
+    textInverse: '#FFFFFF',
+    success: '#059669',
+    successLight: '#05966915',
+    error: '#DC2626',
+    errorLight: '#DC262615',
+    warning: '#D97706',
+    warningLight: '#D9770615',
+    shadow: '#3C2415',
+    overlay: 'rgba(60,36,21,0.4)',
+    gradient: ['#92400E', '#78350F'],
+  },
+
+  arctic: {
+    primary: '#0369A1',       // Deep sky blue
+    primaryLight: '#0EA5E9',
+    primaryDark: '#075985',
+    secondary: '#06B6D4',     // Cyan
+    accent: '#F43F5E',        // Rose accent
+    background: '#F8FAFC',    // Ice white
+    surface: '#FFFFFF',
+    surfaceAlt: '#EFF6FF',
+    border: '#BFDBFE',
+    borderLight: '#DBEAFE',
+    text: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#94A3B8',
+    textInverse: '#FFFFFF',
+    success: '#10B981',
+    successLight: '#10B98115',
+    error: '#EF4444',
+    errorLight: '#EF444415',
+    warning: '#F59E0B',
+    warningLight: '#F59E0B15',
+    shadow: '#0F172A',
+    overlay: 'rgba(15,23,42,0.4)',
+    gradient: ['#0369A1', '#075985'],
+  },
+
+  volcanic: {
+    primary: '#DC2626',       // Bold red
+    primaryLight: '#EF4444',
+    primaryDark: '#B91C1C',
+    secondary: '#F97316',     // Orange
+    accent: '#FBBF24',        // Gold accent
+    background: '#1C1917',    // Dark stone
+    surface: '#292524',
+    surfaceAlt: '#3D3733',
+    border: '#44403C',
+    borderLight: '#292524',
+    text: '#FAFAF9',
+    textSecondary: '#D6D3D1',
+    textMuted: '#A8A29E',
+    textInverse: '#FFFFFF',
+    success: '#4ADE80',
+    successLight: '#4ADE8020',
+    error: '#FB7185',
+    errorLight: '#FB718520',
+    warning: '#FBBF24',
+    warningLight: '#FBBF2420',
+    shadow: '#000000',
+    overlay: 'rgba(0,0,0,0.6)',
+    gradient: ['#DC2626', '#B91C1C'],
+  },
+
+  lavender: {
+    primary: '#7C3AED',       // Vivid purple
+    primaryLight: '#A78BFA',
+    primaryDark: '#6D28D9',
+    secondary: '#C084FC',     // Light purple
+    accent: '#F472B6',        // Pink accent
+    background: '#FAF5FF',    // Soft lavender tint
+    surface: '#FFFFFF',
+    surfaceAlt: '#F3E8FF',
+    border: '#DDD6FE',
+    borderLight: '#EDE9FE',
+    text: '#2E1065',
+    textSecondary: '#6B21A8',
+    textMuted: '#A78BFA',
+    textInverse: '#FFFFFF',
+    success: '#10B981',
+    successLight: '#10B98115',
+    error: '#EF4444',
+    errorLight: '#EF444415',
+    warning: '#F59E0B',
+    warningLight: '#F59E0B15',
+    shadow: '#2E1065',
+    overlay: 'rgba(46,16,101,0.4)',
+    gradient: ['#7C3AED', '#6D28D9'],
+  },
+
+  copper: {
+    primary: '#C2410C',       // Deep copper
+    primaryLight: '#EA580C',
+    primaryDark: '#9A3412',
+    secondary: '#D97706',     // Amber
+    accent: '#0D9488',        // Teal accent
+    background: '#FFF7ED',    // Warm peach
+    surface: '#FFFFFF',
+    surfaceAlt: '#FFEDD5',
+    border: '#FED7AA',
+    borderLight: '#FFF1E0',
+    text: '#431407',
+    textSecondary: '#7C2D12',
+    textMuted: '#C2410C',
+    textInverse: '#FFFFFF',
+    success: '#059669',
+    successLight: '#05966915',
+    error: '#DC2626',
+    errorLight: '#DC262615',
+    warning: '#D97706',
+    warningLight: '#D9770615',
+    shadow: '#431407',
+    overlay: 'rgba(67,20,7,0.4)',
+    gradient: ['#C2410C', '#9A3412'],
+  },
 };
 
 // Friendly display names for the theme picker
@@ -302,6 +464,12 @@ export const THEME_NAMES: Record<ThemeId, string> = {
   sunset: 'Sunset',
   slate: 'Slate',
   berry: 'Berry',
+  storm: 'Storm',
+  espresso: 'Espresso',
+  arctic: 'Arctic',
+  volcanic: 'Volcanic',
+  lavender: 'Lavender',
+  copper: 'Copper',
 };
 
 type ThemeContextType = {

@@ -13,6 +13,7 @@ import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import StoreLogo from '../../components/StoreLogo';
+import { useUserAlias } from '../../context/UserAliasContext';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -146,6 +147,7 @@ export default function HomeScreen() {
   const [geofencingActive, setGeofencingActive] = useState(false);
   const { user, signOut } = useAuth();
   const { colors } = useTheme();
+  const { alias } = useUserAlias();
   const [refreshing, setRefreshing] = useState(false);
   const [showDebugMode, setShowDebugMode] = useState(false);
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
@@ -237,7 +239,7 @@ export default function HomeScreen() {
     return 'Good evening';
   };
 
-  const userName = user?.email?.split('@')[0] || 'there';
+  const userName = alias || user?.email?.split('@')[0] || 'there';
 
   // Get stores with pending items
   const storesWithPendingItems = stores

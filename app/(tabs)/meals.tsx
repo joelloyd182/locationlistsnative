@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, TextInput, RefreshControl, Modal, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, TextInput, RefreshControl, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useMealPlan, Meal } from '../../context/MealPlanContext';
@@ -10,6 +10,7 @@ import { TemplateLibraryModal } from '../../components/TemplateLibraryModal';
 import { WeeklyGroceryModal } from '../../components/WeeklyGroceryModal';
 import { useWeekStart } from '../../context/WeekStartContext';
 import { MoveMealModal } from '../../components/MoveMealModal';
+import PageHeader from '../../components/PageHeader';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 // Meal type config with Ionicons
@@ -166,6 +167,19 @@ export default function MealsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <PageHeader 
+        title="Meals" 
+        subtitle={formatWeekRange()}
+        rightAction={{
+          icon: 'book-outline',
+          label: 'Templates',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setTemplateTargetDate(selectedDate || weekDates[0]?.toISOString().split('T')[0] || '');
+            setShowTemplateLibrary(true);
+          },
+        }}
+      />
       {/* Week Navigation Header */}
       <View style={[styles.weekHeader, elevation(1), { backgroundColor: colors.surface }]}>
         <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton} activeOpacity={0.6}>
@@ -355,16 +369,20 @@ export default function MealsScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <TouchableOpacity 
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          activeOpacity={1}
-          onPress={() => setShowAddModal(false)}
+        <KeyboardAvoidingView 
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-            <Animated.View 
-              entering={FadeIn.duration(200)}
-              style={[styles.modalContent, elevation(4), { backgroundColor: colors.surface }]}
-            >
+          <TouchableOpacity 
+            style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+            activeOpacity={1}
+            onPress={() => setShowAddModal(false)}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <Animated.View 
+                entering={FadeIn.duration(200)}
+                style={[styles.modalContent, elevation(4), { backgroundColor: colors.surface }]}
+              >
               <View style={styles.modalHandle} />
               
               <Text style={[styles.modalTitle, { color: colors.text }]}>
@@ -439,6 +457,7 @@ export default function MealsScreen() {
             </Animated.View>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Template Library Modal */}

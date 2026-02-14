@@ -57,6 +57,7 @@ export default function TabLayout() {
         name="stores"
         options={{
           title: 'Stores',
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "storefront" : "storefront-outline"} size={size} color={color} />
           ),
@@ -75,6 +76,7 @@ export default function TabLayout() {
         name="meals"
         options={{
           title: 'Meals',
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "restaurant" : "restaurant-outline"} size={size} color={color} />
           ),
@@ -84,6 +86,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
+          headerShown: false,
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "settings" : "settings-outline"} size={size} color={color} />
           ),

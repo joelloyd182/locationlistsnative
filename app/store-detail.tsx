@@ -34,6 +34,7 @@ export default function StoreDetailScreen() {
   const [editName, setEditName] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [showStoreInfo, setShowStoreInfo] = useState(false);
 
   useEffect(() => {
     if (showShareModal) {
@@ -286,60 +287,90 @@ export default function StoreDetailScreen() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View>
-            {/* Store Info Card */}
+            {/* Store Info Card — Collapsible */}
             {(store.rating || store.phone || openStatus || store.website) && (
               <View style={[styles.infoCard, elevation(1), { backgroundColor: colors.surface }]}>
-                {store.rating && (
-                  <View style={styles.infoItem}>
-                    <Ionicons name="star" size={16} color="#F59E0B" />
-                    <Text style={[styles.infoItemText, { color: colors.text }]}>
-                      {store.rating.toFixed(1)} / 5.0
-                    </Text>
+                {/* Always-visible header row: open/closed status + toggle */}
+                <TouchableOpacity 
+                  style={styles.infoToggleRow}
+                  onPress={() => setShowStoreInfo(!showStoreInfo)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.infoToggleLeft}>
+                    {openStatus && (
+                      <>
+                        <View style={[
+                          styles.openDot,
+                          { backgroundColor: openStatus.isOpen === true ? colors.success : openStatus.isOpen === false ? colors.error : colors.textMuted }
+                        ]} />
+                        <Text style={[
+                          styles.infoItemText,
+                          { color: colors.text },
+                          openStatus.isOpen === true && { color: colors.success, fontWeight: '600' },
+                          openStatus.isOpen === false && { color: colors.error, fontWeight: '600' },
+                        ]}>
+                          {openStatus.isOpen === true ? 'Open' : openStatus.isOpen === false ? 'Closed' : ''}
+                          {openStatus.isOpen !== null ? ` · ${openStatus.text}` : openStatus.text}
+                        </Text>
+                      </>
+                    )}
+                    {!openStatus && store.rating && (
+                      <>
+                        <Ionicons name="star" size={14} color="#F59E0B" />
+                        <Text style={[styles.infoItemText, { color: colors.text }]}>
+                          {store.rating.toFixed(1)}
+                        </Text>
+                      </>
+                    )}
                   </View>
-                )}
-                
-                {openStatus && (
-                  <View style={styles.infoItem}>
-                    <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-                    <Text style={[
-                      styles.infoItemText,
-                      { color: colors.text },
-                      openStatus.isOpen === true && { color: colors.success, fontWeight: '600' },
-                      openStatus.isOpen === false && { color: colors.error, fontWeight: '600' },
-                    ]}>
-                      {openStatus.isOpen === true ? 'Open' : openStatus.isOpen === false ? 'Closed' : ''}
-                      {openStatus.isOpen !== null ? ` · ${openStatus.text}` : openStatus.text}
-                    </Text>
-                  </View>
-                )}
-                
-                {store.phone && (
-                  <TouchableOpacity 
-                    style={styles.infoItem}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      Linking.openURL(`tel:${store.phone}`);
-                    }}
-                  >
-                    <Ionicons name="call-outline" size={16} color={colors.primary} />
-                    <Text style={[styles.infoItemText, { color: colors.primary }]}>{store.phone}</Text>
-                  </TouchableOpacity>
-                )}
+                  <Ionicons 
+                    name={showStoreInfo ? 'chevron-up' : 'chevron-down'} 
+                    size={18} 
+                    color={colors.textMuted} 
+                  />
+                </TouchableOpacity>
 
-                {store.website && (
-                  <TouchableOpacity 
-                    style={styles.infoItem}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      const url = store.website?.startsWith('http') ? store.website : `https://${store.website}`;
-                      Linking.openURL(url);
-                    }}
-                  >
-                    <Ionicons name="globe-outline" size={16} color={colors.primary} />
-                    <Text style={[styles.infoItemText, { color: colors.primary }]} numberOfLines={1}>
-                      {store.website}
-                    </Text>
-                  </TouchableOpacity>
+                {/* Expandable details */}
+                {showStoreInfo && (
+                  <View style={styles.infoExpandedContent}>
+                    {store.rating && openStatus && (
+                      <View style={styles.infoItem}>
+                        <Ionicons name="star" size={16} color="#F59E0B" />
+                        <Text style={[styles.infoItemText, { color: colors.text }]}>
+                          {store.rating.toFixed(1)} / 5.0
+                        </Text>
+                      </View>
+                    )}
+                    
+                    {store.phone && (
+                      <TouchableOpacity 
+                        style={styles.infoItem}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          Linking.openURL(`tel:${store.phone}`);
+                        }}
+                      >
+                        <Ionicons name="call-outline" size={16} color={colors.primary} />
+                        <Text style={[styles.infoItemText, { color: colors.primary }]}>{store.phone}</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {store.website && (
+                      <TouchableOpacity 
+                        style={styles.infoItem}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const url = store.website?.startsWith('http') ? store.website : `https://${store.website}`;
+                          Linking.openURL(url);
+                        }}
+                      >
+                        <Ionicons name="globe-outline" size={16} color={colors.primary} />
+                        <Text style={[styles.infoItemText, { color: colors.primary }]} numberOfLines={1}>
+                          {store.website}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </View>
             )}
@@ -727,6 +758,29 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     borderRadius: radius.lg,
     padding: spacing.lg,
+    gap: 0,
+  },
+  infoToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  infoToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  openDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  infoExpandedContent: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#00000010',
     gap: spacing.sm + 2,
   },
   infoItem: {

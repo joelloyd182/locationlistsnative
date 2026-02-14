@@ -16,6 +16,7 @@ import { OfflineBanner } from '../components/OfflineBanner';
 import { TemplatesProvider } from '../context/TemplatesContext';
 import { WeekStartProvider } from '../context/WeekStartContext';
 import { BudgetProvider } from '../context/BudgetContext';
+import { UserAliasProvider } from '../context/UserAliasContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -94,6 +95,7 @@ export default function RootLayout() {
   return (
     <CustomThemeProvider>
       <AuthProvider>
+        <UserAliasProvider>
         <WeekStartProvider>
 		<BudgetProvider>
           <StoresProvider>
@@ -105,6 +107,7 @@ export default function RootLayout() {
           </StoresProvider>
 		  </BudgetProvider>
         </WeekStartProvider>
+        </UserAliasProvider>
       </AuthProvider>
     </CustomThemeProvider>
   );

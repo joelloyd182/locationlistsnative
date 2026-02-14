@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform, TextInput } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform, TextInput, Modal } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, THEMES, THEME_NAMES, ThemeId, elevation, spacing, radius, typography } from '../../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,9 @@ import { useState, useEffect } from 'react';
 import { DataManagementSection } from '../../components/DataManagementSection';
 import { useWeekStart, WEEK_START_OPTIONS, WeekStartDay } from '../../context/WeekStartContext';
 import { useBudget, BudgetPeriod } from '../../context/BudgetContext';
+import { useUserAlias } from '../../context/UserAliasContext';
 import { useRouter } from 'expo-router';
+import PageHeader from '../../components/PageHeader';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 // ── Section Header Component ─────────────────────
@@ -65,8 +67,11 @@ export default function SettingsScreen() {
   const { themeId, colors, setTheme } = useTheme();
   const { weekStartDay, setWeekStartDay } = useWeekStart();
   const { budgetTarget, budgetPeriod, setBudgetTarget, setBudgetPeriod } = useBudget();
+  const { alias, setAlias } = useUserAlias();
   const router = useRouter();
   const [notificationStatus, setNotificationStatus] = useState<string>('checking...');
+  const [editingAlias, setEditingAlias] = useState(false);
+  const [aliasInput, setAliasInput] = useState('');
 
   useEffect(() => {
     checkNotificationPermissions();
@@ -119,6 +124,8 @@ export default function SettingsScreen() {
   };
 
   return (
+    <>
+    <PageHeader title="Settings" />
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.contentContainer}
@@ -128,6 +135,16 @@ export default function SettingsScreen() {
       <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.section}>
         <SectionHeader icon="person-outline" title="Account" colors={colors} />
         <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          <InfoRow 
+            label="Display Name" 
+            value={alias || '—'} 
+            icon="pencil-outline"
+            onPress={() => {
+              setAliasInput(alias);
+              setEditingAlias(true);
+            }}
+            colors={colors}
+          />
           <InfoRow 
             label="Email" 
             value={user?.email || 'Not signed in'} 
@@ -309,7 +326,7 @@ export default function SettingsScreen() {
                 style={[
                   styles.themeCard,
                   elevation(isSelected ? 3 : 1),
-                  { backgroundColor: colors.surface },
+                  { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 },
                   isSelected && { borderWidth: 2, borderColor: theme.primary }
                 ]}
                 onPress={() => selectTheme(id)}
@@ -324,10 +341,10 @@ export default function SettingsScreen() {
                     end={{ x: 1, y: 1 }}
                     style={styles.themePreviewHeader}
                   />
-                  {/* Fake content lines */}
+                  {/* Fake content lines - use border color for visibility on all themes */}
                   <View style={styles.themePreviewContent}>
-                    <View style={[styles.themePreviewLine, { backgroundColor: theme.surface, width: '80%' }]} />
-                    <View style={[styles.themePreviewLine, { backgroundColor: theme.surface, width: '60%' }]} />
+                    <View style={[styles.themePreviewLine, { backgroundColor: theme.border, width: '80%' }]} />
+                    <View style={[styles.themePreviewLine, { backgroundColor: theme.border, width: '60%' }]} />
                   </View>
                 </View>
                 
@@ -340,7 +357,7 @@ export default function SettingsScreen() {
                 
                 {/* Name + check */}
                 <View style={styles.themeNameRow}>
-                  <Text style={[styles.themeName, { color: colors.text }]}>
+                  <Text style={[styles.themeName, { color: theme.text }]}>
                     {THEME_NAMES[id]}
                   </Text>
                   {isSelected && (
@@ -384,6 +401,63 @@ export default function SettingsScreen() {
         <Text style={[styles.footerText, { color: colors.textMuted }]}>Made by Kooky Rooster Media 🐓</Text>
       </View>
     </ScrollView>
+
+    {/* Edit Alias Modal */}
+    <Modal
+      visible={editingAlias}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setEditingAlias(false)}
+    >
+      <TouchableOpacity 
+        style={styles.aliasModalOverlay}
+        activeOpacity={1}
+        onPress={() => setEditingAlias(false)}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <View style={[styles.aliasModalContent, elevation(4), { backgroundColor: colors.surface }]}>
+            <Text style={[styles.aliasModalTitle, { color: colors.text }]}>Display Name</Text>
+            <Text style={[styles.aliasModalHint, { color: colors.textMuted }]}>
+              This shows on the home screen greeting
+            </Text>
+            <TextInput
+              style={[styles.aliasModalInput, { 
+                backgroundColor: colors.surfaceAlt, 
+                borderColor: colors.borderLight,
+                color: colors.text,
+              }]}
+              placeholder="Enter your name..."
+              placeholderTextColor={colors.textMuted}
+              value={aliasInput}
+              onChangeText={setAliasInput}
+              autoFocus
+              autoCapitalize="words"
+            />
+            <View style={styles.aliasModalActions}>
+              <TouchableOpacity
+                style={[styles.aliasModalButton, { borderColor: colors.border }]}
+                onPress={() => setEditingAlias(false)}
+              >
+                <Text style={[styles.aliasModalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.aliasModalButton, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  if (aliasInput.trim()) {
+                    await setAlias(aliasInput.trim());
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  }
+                  setEditingAlias(false);
+                }}
+              >
+                <Text style={[styles.aliasModalButtonText, { color: colors.textInverse }]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+    </>
   );
 }
 
@@ -609,6 +683,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   signOutText: {
+    ...typography.button,
+  },
+
+  // ── Alias Modal ───────────────────────────────
+  aliasModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  aliasModalContent: {
+    width: 300,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+  },
+  aliasModalTitle: {
+    ...typography.subtitle,
+    marginBottom: spacing.xs,
+  },
+  aliasModalHint: {
+    ...typography.small,
+    marginBottom: spacing.lg,
+  },
+  aliasModalInput: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    ...typography.body,
+    marginBottom: spacing.lg,
+  },
+  aliasModalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  aliasModalButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  aliasModalButtonText: {
     ...typography.button,
   },
 
