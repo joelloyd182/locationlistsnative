@@ -151,6 +151,12 @@ export default function StoresScreen() {
                       <Text style={[styles.storeName, { color: colors.text }]} numberOfLines={1}>
                         {store.name}
                       </Text>
+                      {(store.members?.length || 0) > 1 && (
+                        <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
+                          <Ionicons name="people" size={11} color={colors.primary} />
+                          <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>Shared</Text>
+                        </View>
+                      )}
                       {allDone && (
                         <View style={[styles.doneBadge, { backgroundColor: colors.success }]}>
                           <Text style={[styles.doneBadgeText, { color: colors.textInverse }]}>Done</Text>
@@ -350,6 +356,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   doneBadgeText: {
+    ...typography.small,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  sharedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  sharedBadgeText: {
     ...typography.small,
     fontSize: 10,
     fontWeight: '700',

@@ -10,7 +10,9 @@ import { TemplateLibraryModal } from '../../components/TemplateLibraryModal';
 import { WeeklyGroceryModal } from '../../components/WeeklyGroceryModal';
 import { useWeekStart } from '../../context/WeekStartContext';
 import { MoveMealModal } from '../../components/MoveMealModal';
+import SwipeableMealRow from '../../components/SwipeableMealRow';
 import PageHeader from '../../components/PageHeader';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 // Meal type config with Ionicons
@@ -166,6 +168,7 @@ export default function MealsScreen() {
   };
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <PageHeader 
         title="Meals" 
@@ -297,60 +300,21 @@ export default function MealsScreen() {
                     .map(meal => {
                       const mealConfig = MEAL_TYPE_CONFIG[meal.mealType || 'dinner'];
                       return (
-                        <TouchableOpacity
+                        <SwipeableMealRow
                           key={meal.id}
-                          style={[
-                            styles.mealItem,
-                            { borderLeftColor: mealConfig.color, backgroundColor: mealConfig.color + '08' }
-                          ]}
+                          meal={meal}
+                          mealConfig={mealConfig}
+                          colors={colors}
+                          formatIngredient={detectIngredientEmoji}
                           onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             router.push(`/meal-detail?id=${meal.id}`);
                           }}
                           onLongPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            Alert.alert(
-                              meal.name,
-                              'What would you like to do?',
-                              [
-                                {
-                                  text: 'Move to Another Day',
-                                  onPress: () => {
-                                    setMealToMove(meal);
-                                    setShowMoveModal(true);
-                                  }
-                                },
-                                {
-                                  text: 'Delete Meal',
-                                  style: 'destructive',
-                                  onPress: () => handleDeleteMeal(meal.id, meal.name)
-                                },
-                                { text: 'Cancel', style: 'cancel' }
-                              ]
-                            );
+                            setMealToMove(meal);
+                            setShowMoveModal(true);
                           }}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.mealContent}>
-                            <Ionicons 
-                              name={mealConfig.icon} 
-                              size={20} 
-                              color={mealConfig.color} 
-                            />
-                            <View style={styles.mealInfo}>
-                              <Text style={[styles.mealName, { color: colors.text }]}>
-                                {meal.name}
-                              </Text>
-                              {meal.ingredients && meal.ingredients.length > 0 && (
-                                <Text style={[styles.ingredientsList, { color: colors.textMuted }]} numberOfLines={1}>
-                                  {meal.ingredients.slice(0, 3).map(detectIngredientEmoji).join(' · ')}
-                                  {meal.ingredients.length > 3 ? ` +${meal.ingredients.length - 3}` : ''}
-                                </Text>
-                              )}
-                            </View>
-                            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                          </View>
-                        </TouchableOpacity>
+                          onDelete={() => handleDeleteMeal(meal.id, meal.name)}
+                        />
                       );
                     })}
                 </View>
@@ -488,6 +452,7 @@ export default function MealsScreen() {
         />
       )}
     </View>
+    </GestureHandlerRootView>
   );
 }
 

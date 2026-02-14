@@ -654,42 +654,100 @@ export default function StoreDetailScreen() {
             >
               <View style={styles.modalHandle} />
               <Text style={[styles.modalTitle, { color: colors.text }]}>Share Store</Text>
-              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-                Select who to share this list with
-              </Text>
-              
-              {allUsers.length === 0 ? (
-                <Text style={[styles.noUsersText, { color: colors.textMuted }]}>
-                  No other users found
-                </Text>
-              ) : (
-                allUsers.map(u => (
-                  <TouchableOpacity
-                    key={u.uid}
-                    style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
-                    onPress={async () => {
-                      try {
-                        await shareStoreWithUser(store.id, u.uid);
-                        Alert.alert('Success', `Shared with ${u.displayName}!`);
-                        setShowShareModal(false);
-                      } catch (error: any) {
-                        Alert.alert('Error', error.message);
-                      }
-                    }}
-                    disabled={loading}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.userAvatar, { backgroundColor: colors.primary + '15' }]}>
-                      <Ionicons name="person-outline" size={18} color={colors.primary} />
-                    </View>
-                    <View style={styles.userInfo}>
-                      <Text style={[styles.userName, { color: colors.text }]}>{u.displayName}</Text>
-                      <Text style={[styles.userEmail, { color: colors.textMuted }]}>{u.email}</Text>
-                    </View>
-                    <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-                  </TouchableOpacity>
-                ))
+
+              {/* Current members */}
+              {(store.members?.length || 0) > 1 && (
+                <View style={styles.shareSection}>
+                  <Text style={[styles.shareSectionTitle, { color: colors.textSecondary }]}>
+                    Shared with
+                  </Text>
+                  {allUsers
+                    .filter(u => store.members?.includes(u.uid))
+                    .map(u => (
+                      <View
+                        key={u.uid}
+                        style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
+                      >
+                        <View style={[styles.userAvatar, { backgroundColor: colors.success + '15' }]}>
+                          <Ionicons name="person" size={18} color={colors.success} />
+                        </View>
+                        <View style={styles.userInfo}>
+                          <Text style={[styles.userName, { color: colors.text }]}>{u.displayName}</Text>
+                          <Text style={[styles.userEmail, { color: colors.textMuted }]}>{u.email}</Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => {
+                            Alert.alert(
+                              'Remove Access',
+                              `Stop sharing with ${u.displayName}?`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Remove',
+                                  style: 'destructive',
+                                  onPress: async () => {
+                                    try {
+                                      const storeRef = doc(db, 'stores', store.id);
+                                      await updateDoc(storeRef, {
+                                        members: arrayRemove(u.uid)
+                                      });
+                                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    } catch (error: any) {
+                                      Alert.alert('Error', error.message);
+                                    }
+                                  }
+                                }
+                              ]
+                            );
+                          }}
+                        >
+                          <Ionicons name="close-circle" size={22} color={colors.error} />
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  }
+                </View>
               )}
+
+              {/* Add new members */}
+              <View style={styles.shareSection}>
+                <Text style={[styles.shareSectionTitle, { color: colors.textSecondary }]}>
+                  {(store.members?.length || 0) > 1 ? 'Add more people' : 'Select who to share with'}
+                </Text>
+                {allUsers.filter(u => !store.members?.includes(u.uid)).length === 0 ? (
+                  <Text style={[styles.noUsersText, { color: colors.textMuted }]}>
+                    {allUsers.length === 0 ? 'No other users found' : 'Already shared with everyone'}
+                  </Text>
+                ) : (
+                  allUsers
+                    .filter(u => !store.members?.includes(u.uid))
+                    .map(u => (
+                      <TouchableOpacity
+                        key={u.uid}
+                        style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
+                        onPress={async () => {
+                          try {
+                            await shareStoreWithUser(store.id, u.uid);
+                            Alert.alert('Shared!', `${u.displayName} can now see this list`);
+                          } catch (error: any) {
+                            Alert.alert('Error', error.message);
+                          }
+                        }}
+                        disabled={loading}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.userAvatar, { backgroundColor: colors.primary + '15' }]}>
+                          <Ionicons name="person-outline" size={18} color={colors.primary} />
+                        </View>
+                        <View style={styles.userInfo}>
+                          <Text style={[styles.userName, { color: colors.text }]}>{u.displayName}</Text>
+                          <Text style={[styles.userEmail, { color: colors.textMuted }]}>{u.email}</Text>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                      </TouchableOpacity>
+                    ))
+                )}
+              </View>
 
               <TouchableOpacity
                 style={[styles.modalCancelButton, { borderColor: colors.border, marginTop: spacing.lg }]}
@@ -1022,6 +1080,16 @@ const styles = StyleSheet.create({
   },
 
   // ── Share Modal ────────────────────────────────
+  shareSection: {
+    marginTop: spacing.md,
+  },
+  shareSectionTitle: {
+    ...typography.caption,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+  },
   noUsersText: {
     ...typography.body,
     textAlign: 'center',

@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
     padding: spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 40,
   },
   handle: {
     width: 36,
