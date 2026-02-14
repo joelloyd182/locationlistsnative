@@ -167,59 +167,71 @@ export default function MealsScreen() {
     }
   };
 
+  // Count total meals this week
+  const weekMealCount = weekDates.reduce((sum, date) => sum + getMealsForDate(date).length, 0);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <PageHeader 
         title="Meals" 
-        subtitle={formatWeekRange()}
+        subtitle={`${weekMealCount} meal${weekMealCount !== 1 ? 's' : ''} this week`}
         rightAction={{
-          icon: 'book-outline',
-          label: 'Templates',
+          icon: 'cart-outline',
+          label: 'Grocery',
           onPress: () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setTemplateTargetDate(selectedDate || weekDates[0]?.toISOString().split('T')[0] || '');
-            setShowTemplateLibrary(true);
+            setShowWeeklyGrocery(true);
           },
         }}
       />
-      {/* Week Navigation Header */}
-      <View style={[styles.weekHeader, elevation(1), { backgroundColor: colors.surface }]}>
+
+      {/* Compact Week Navigation */}
+      <View style={[styles.weekNav, { backgroundColor: colors.surface, borderBottomColor: colors.borderLight }]}>
         <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton} activeOpacity={0.6}>
-          <Ionicons name="chevron-back" size={24} color={colors.primary} />
+          <Ionicons name="chevron-back" size={20} color={colors.primary} />
         </TouchableOpacity>
         
-        <TouchableOpacity onPress={goToToday} style={styles.weekTitleContainer} activeOpacity={0.7}>
-          <Text style={[styles.weekTitle, { color: colors.text }]}>{formatWeekRange()}</Text>
-          <Text style={[styles.weekSubtitle, { color: colors.textMuted }]}>Tap for today</Text>
-        </TouchableOpacity>
+        {weekDates.map((date, i) => {
+          const today = isToday(date);
+          const hasMeals = getMealsForDate(date).length > 0;
+          const dayLetter = date.toLocaleDateString('en-US', { weekday: 'narrow' });
+          
+          return (
+            <TouchableOpacity 
+              key={i} 
+              style={[
+                styles.weekDot,
+                today && { backgroundColor: colors.primary },
+              ]}
+              onPress={goToToday}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.weekDotText,
+                { color: today ? colors.textInverse : colors.textSecondary },
+              ]}>
+                {dayLetter}
+              </Text>
+              <Text style={[
+                styles.weekDotNumber,
+                { color: today ? colors.textInverse : colors.text },
+              ]}>
+                {date.getDate()}
+              </Text>
+              {hasMeals && !today && (
+                <View style={[styles.mealDot, { backgroundColor: colors.primary }]} />
+              )}
+            </TouchableOpacity>
+          );
+        })}
         
         <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton} activeOpacity={0.6}>
-          <Ionicons name="chevron-forward" size={24} color={colors.primary} />
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Weekly Grocery Button */}
-      <TouchableOpacity
-        style={[styles.groceryButton, elevation(2), { backgroundColor: colors.surface }]}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          setShowWeeklyGrocery(true);
-        }}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.groceryIconContainer, { backgroundColor: colors.success + '15' }]}>
-          <Ionicons name="cart-outline" size={20} color={colors.success} />
-        </View>
-        <View style={styles.groceryTextContainer}>
-          <Text style={[styles.groceryTitle, { color: colors.text }]}>Weekly Grocery List</Text>
-          <Text style={[styles.grocerySubtitle, { color: colors.textMuted }]}>
-            Send all ingredients to stores
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-      </TouchableOpacity>
-
+      {/* Timeline */}
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -236,89 +248,107 @@ export default function MealsScreen() {
           const dayMeals = getMealsForDate(date);
           const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
           const dayNumber = date.getDate();
-          const monthName = date.toLocaleDateString('en-US', { month: 'short' });
           const today = isToday(date);
+          const hasMeals = dayMeals.length > 0;
 
           return (
             <Animated.View 
               key={index}
-              entering={FadeInDown.delay(index * 50).duration(350)}
-              style={[
-                styles.dayCard, 
-                elevation(today ? 3 : 1),
-                { backgroundColor: colors.surface },
-                today && { borderWidth: 2, borderColor: colors.primary },
-              ]}
+              entering={FadeInDown.delay(index * 40).duration(300)}
+              style={styles.timelineRow}
             >
-              {/* Day Header */}
-              <View style={[styles.dayHeader, { borderBottomColor: colors.borderLight }]}>
-                <View style={styles.dayDateContainer}>
+              {/* Left: Date column */}
+              <View style={styles.dateColumn}>
+                <Text style={[
+                  styles.dateDayName, 
+                  { color: today ? colors.primary : colors.textMuted }
+                ]}>
+                  {dayName}
+                </Text>
+                <View style={[
+                  styles.dateCircle,
+                  { backgroundColor: today ? colors.primary : 'transparent' },
+                  !today && { borderWidth: 1.5, borderColor: hasMeals ? colors.textSecondary : colors.borderLight },
+                ]}>
                   <Text style={[
-                    styles.dayName, 
-                    { color: today ? colors.primary : colors.textSecondary }
+                    styles.dateNumber,
+                    { color: today ? colors.textInverse : hasMeals ? colors.text : colors.textMuted }
                   ]}>
-                    {dayName}
+                    {dayNumber}
                   </Text>
-                  <View style={styles.dayNumberRow}>
-                    <Text style={[
-                      styles.dayNumber, 
-                      { color: today ? colors.primary : colors.text }
-                    ]}>
-                      {dayNumber}
-                    </Text>
-                    {today && (
-                      <View style={[styles.todayBadge, { backgroundColor: colors.primary }]}>
-                        <Text style={[styles.todayBadgeText, { color: colors.textInverse }]}>Today</Text>
-                      </View>
-                    )}
-                  </View>
                 </View>
-                
-                <TouchableOpacity
-                  style={[styles.addMealButton, { backgroundColor: colors.primary + '12' }]}
-                  onPress={() => openAddMealModal(date)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={18} color={colors.primary} />
-                </TouchableOpacity>
               </View>
 
-              {/* Meals */}
-              {dayMeals.length === 0 ? (
-                <View style={styles.emptyDay}>
-                  <Text style={[styles.emptyDayText, { color: colors.textMuted }]}>
-                    No meals planned
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.mealsList}>
-                  {dayMeals
-                    .sort((a, b) => {
-                      const order = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 };
-                      return order[a.mealType || 'dinner'] - order[b.mealType || 'dinner'];
-                    })
-                    .map(meal => {
-                      const mealConfig = MEAL_TYPE_CONFIG[meal.mealType || 'dinner'];
-                      return (
-                        <SwipeableMealRow
-                          key={meal.id}
-                          meal={meal}
-                          mealConfig={mealConfig}
-                          colors={colors}
-                          formatIngredient={detectIngredientEmoji}
-                          onPress={() => {
-                            router.push(`/meal-detail?id=${meal.id}`);
-                          }}
-                          onLongPress={() => {
-                            setMealToMove(meal);
-                            setShowMoveModal(true);
-                          }}
-                          onDelete={() => handleDeleteMeal(meal.id, meal.name)}
-                        />
-                      );
-                    })}
-                </View>
-              )}
+              {/* Center: Timeline line */}
+              <View style={styles.timelineLineContainer}>
+                <View style={[
+                  styles.timelineLine,
+                  { backgroundColor: today ? colors.primary + '30' : colors.borderLight },
+                  index === 0 && styles.timelineLineFirst,
+                  index === 6 && styles.timelineLineLast,
+                ]} />
+                <View style={[
+                  styles.timelineNode,
+                  { backgroundColor: today ? colors.primary : hasMeals ? colors.textMuted : colors.borderLight },
+                ]} />
+              </View>
+
+              {/* Right: Meals content */}
+              <View style={[
+                styles.mealsColumn,
+                !hasMeals && styles.mealsColumnEmpty,
+              ]}>
+                {hasMeals ? (
+                  <>
+                    {dayMeals
+                      .sort((a, b) => {
+                        const order = { breakfast: 0, lunch: 1, dinner: 2, snack: 3 };
+                        return order[a.mealType || 'dinner'] - order[b.mealType || 'dinner'];
+                      })
+                      .map(meal => {
+                        const mealConfig = MEAL_TYPE_CONFIG[meal.mealType || 'dinner'];
+                        return (
+                          <SwipeableMealRow
+                            key={meal.id}
+                            meal={meal}
+                            mealConfig={mealConfig}
+                            colors={colors}
+                            formatIngredient={detectIngredientEmoji}
+                            onPress={() => {
+                              router.push(`/meal-detail?id=${meal.id}`);
+                            }}
+                            onLongPress={() => {
+                              setMealToMove(meal);
+                              setShowMoveModal(true);
+                            }}
+                            onDelete={() => handleDeleteMeal(meal.id, meal.name)}
+                          />
+                        );
+                      })}
+
+                    {/* Inline add button */}
+                    <TouchableOpacity
+                      style={[styles.addMore, { backgroundColor: colors.primary + '08' }]}
+                      onPress={() => openAddMealModal(date)}
+                      activeOpacity={0.6}
+                    >
+                      <Ionicons name="add" size={14} color={colors.primary} />
+                      <Text style={[styles.addMoreText, { color: colors.primary }]}>Add</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.emptySlot, { borderColor: colors.borderLight }]}
+                    onPress={() => openAddMealModal(date)}
+                    activeOpacity={0.6}
+                  >
+                    <Ionicons name="add" size={16} color={colors.textMuted} />
+                    <Text style={[styles.emptySlotText, { color: colors.textMuted }]}>
+                      Add meal
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </Animated.View>
           );
         })}
@@ -350,7 +380,7 @@ export default function MealsScreen() {
               <View style={styles.modalHandle} />
               
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                Add Meal — {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                Add Meal — {selectedDate ? new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
               </Text>
 
               <TextInput
@@ -461,59 +491,42 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   
-  // ── Week Header ────────────────────────────────
-  weekHeader: {
+  // ── Compact Week Nav ────────────────────────────
+  weekNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderBottomWidth: 1,
   },
   navButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  weekTitleContainer: {
+  weekDot: {
     flex: 1,
     alignItems: 'center',
-  },
-  weekTitle: {
-    ...typography.subtitle,
-  },
-  weekSubtitle: {
-    ...typography.small,
-    marginTop: 1,
-  },
-
-  // ── Grocery Button ─────────────────────────────
-  groceryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: spacing.lg,
-    marginVertical: spacing.md,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  groceryIconContainer: {
-    width: 40,
-    height: 40,
+    paddingVertical: spacing.xs,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  groceryTextContainer: {
-    flex: 1,
+  weekDotText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
-  groceryTitle: {
-    ...typography.bodyBold,
-  },
-  grocerySubtitle: {
-    ...typography.small,
+  weekDotNumber: {
+    fontSize: 14,
+    fontWeight: '700',
     marginTop: 1,
+  },
+  mealDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    marginTop: 3,
   },
 
   // ── Scroll ─────────────────────────────────────
@@ -521,93 +534,105 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
 
-  // ── Day Card ───────────────────────────────────
-  dayCard: {
-    borderRadius: radius.lg,
-    marginBottom: spacing.md,
-    overflow: 'hidden',
-  },
-  dayHeader: {
+  // ── Timeline Row ───────────────────────────────
+  timelineRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingRight: spacing.lg,
+    minHeight: 56,
+  },
+
+  // ── Date Column (left) ─────────────────────────
+  dateColumn: {
+    width: 52,
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
+    paddingTop: spacing.sm,
   },
-  dayDateContainer: {
-    flex: 1,
-  },
-  dayName: {
-    ...typography.small,
+  dateDayName: {
+    fontSize: 10,
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  dayNumberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  dayNumber: {
-    ...typography.title,
-    fontSize: 20,
-  },
-  todayBadge: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  todayBadgeText: {
-    ...typography.small,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  addMealButton: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.md,
+  dateCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
+  },
+  dateNumber: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 
-  // ── Empty Day ──────────────────────────────────
-  emptyDay: {
-    paddingVertical: spacing.lg,
+  // ── Timeline Line (center) ─────────────────────
+  timelineLineContainer: {
+    width: 20,
     alignItems: 'center',
+    position: 'relative',
   },
-  emptyDayText: {
-    ...typography.caption,
-    fontStyle: 'italic',
+  timelineLine: {
+    position: 'absolute',
+    width: 2,
+    top: 0,
+    bottom: 0,
+  },
+  timelineLineFirst: {
+    top: '50%',
+  },
+  timelineLineLast: {
+    height: '50%',
+  },
+  timelineNode: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: spacing.lg,
+    zIndex: 1,
   },
 
-  // ── Meals List ─────────────────────────────────
-  mealsList: {
-    padding: spacing.md,
-    gap: spacing.sm,
+  // ── Meals Column (right) ───────────────────────
+  mealsColumn: {
+    flex: 1,
+    paddingVertical: spacing.xs,
   },
-  mealItem: {
-    borderLeftWidth: 3,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+  mealsColumnEmpty: {
+    justifyContent: 'center',
+    minHeight: 48,
   },
-  mealContent: {
+
+  // ── Empty Slot ─────────────────────────────────
+  emptySlot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
   },
-  mealInfo: {
-    flex: 1,
-  },
-  mealName: {
-    ...typography.bodyBold,
-  },
-  ingredientsList: {
+  emptySlotText: {
     ...typography.small,
+  },
+
+  // ── Add More Button ────────────────────────────
+  addMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.sm,
     marginTop: 2,
+  },
+  addMoreText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   // ── Modal ──────────────────────────────────────
@@ -619,7 +644,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
     padding: spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 40,
   },
   modalHandle: {
     width: 36,
