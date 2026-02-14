@@ -1,17 +1,24 @@
-import { StyleSheet, Text, View, TextInput, Button, FlatList, TouchableOpacity, Alert, Linking, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TextInput, FlatList, TouchableOpacity, Alert, Linking, ActivityIndicator, Platform, Modal } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStores } from '../context/StoresContext';
 import { doc, updateDoc, arrayUnion, collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
 import * as Haptics from 'expo-haptics';
+import Animated, { 
+  FadeIn,
+} from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import SwipeableItemRow from '../components/SwipeableItemRow';
+import { useBudget } from '../context/BudgetContext';
+
 
 export default function StoreDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { stores, addItem, toggleItem, deleteItem, deleteStore } = useStores();
+  const { stores, addItem, toggleItem, deleteItem, deleteStore, updateItem, clearCheckedItems } = useStores();
   const [newItemText, setNewItemText] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,6 +27,13 @@ export default function StoreDetailScreen() {
   const { user } = useAuth();
   const [allUsers, setAllUsers] = useState<{uid: string, email: string, displayName: string}[]>([]);
   const { colors } = useTheme();
+  const { logPrice } = useBudget();
+  
+  // Info/edit panel state
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editNote, setEditNote] = useState('');
 
   useEffect(() => {
     if (showShareModal) {
@@ -43,27 +57,44 @@ export default function StoreDetailScreen() {
   if (!store) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Store not found</Text>
+        <Stack.Screen options={{ title: 'Not Found' }} />
+        <View style={styles.notFoundState}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.notFoundText, { color: colors.textSecondary }]}>Store not found</Text>
+        </View>
       </View>
     );
   }
 
- const handleAddItem = async () => {
-  if (newItemText.trim()) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); // ← MOVED HERE (fires instantly!)
-    setLoading(true);
-    try {
-      await addItem(store.id, newItemText.trim());
-      setNewItemText('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } finally {
-      setLoading(false);
+  const handleAddItem = async () => {
+    if (newItemText.trim()) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setLoading(true);
+      try {
+        await addItem(store.id, newItemText.trim());
+        setNewItemText('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } finally {
+        setLoading(false);
+      }
     }
-  }
-};
+  };
 
   const handleToggleItem = async (itemId: string) => {
+    if (!store) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Log price to history when checking OFF an item (marking as done)
+    const item = store.items.find(i => i.id === itemId);
+    if (item && !item.checked && item.price != null && item.price > 0) {
+      logPrice({
+        itemText: item.text,
+        storeName: store.name,
+        storeId: store.id,
+        price: item.price,
+      });
+    }
+
     setLoading(true);
     try {
       await toggleItem(store.id, itemId);
@@ -81,10 +112,48 @@ export default function StoreDetailScreen() {
       setLoading(false);
     }
   };
+
+  const handleInfoPress = (item: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedItem(item);
+    setEditName(item.text || '');
+    setEditPrice(item.price !== undefined && item.price !== null ? item.price.toString() : '');
+    setEditNote(item.note || '');
+  };
+
+  const handleSaveItemDetails = async () => {
+    if (!selectedItem) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    const updates: any = {};
+    
+    // Rename
+    const trimmedName = editName.trim();
+    if (trimmedName && trimmedName !== selectedItem.text) {
+      updates.text = trimmedName;
+    }
+    
+    // Price
+    const priceValue = parseFloat(editPrice);
+    if (!isNaN(priceValue) && priceValue >= 0) {
+      updates.price = priceValue;
+    } else if (editPrice === '') {
+      updates.price = null;
+    }
+    updates.note = editNote.trim() || null;
+
+    setLoading(true);
+    try {
+      await updateItem(store.id, selectedItem.id, updates);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setLoading(false);
+      setSelectedItem(null);
+    }
+  };
   
   const shareStoreWithUser = async (storeId: string, targetUserId: string) => {
     if (!user) return;
-    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     try {
@@ -98,7 +167,6 @@ export default function StoreDetailScreen() {
     }
   };
 
-  // Check if store is open now
   const getOpenStatus = () => {
     if (!store.openingHours || store.openingHours.length === 0) return null;
     
@@ -131,38 +199,46 @@ export default function StoreDetailScreen() {
   };
 
   const openStatus = getOpenStatus();
+  const uncheckedItems = store.items.filter(i => !i.checked);
+  const checkedItems = store.items.filter(i => i.checked);
+  const totalItems = store.items.length;
+  const progress = totalItems > 0 ? checkedItems.length / totalItems : 0;
+
+  // Sort: unchecked first, then checked
+  const sortedItems = [...uncheckedItems, ...checkedItems];
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen 
         options={{ 
           title: store.name,
           headerRight: () => (
-            <View style={{ flexDirection: 'row', gap: 10, marginRight: 8 }}>
+            <View style={styles.headerButtons}>
               <TouchableOpacity 
-                style={[styles.headerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[styles.headerButton, { backgroundColor: colors.primary + '12' }]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   router.push(`/edit-store?id=${store.id}`);
                 }}
                 disabled={loading}
               >
-                <Ionicons name="pencil" size={18} color={colors.primary} />
+                <Ionicons name="pencil" size={17} color={colors.primary} />
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.headerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[styles.headerButton, { backgroundColor: colors.success + '15' }]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setShowShareModal(true);
                 }}
                 disabled={loading}
               >
-                <Ionicons name="share-social" size={18} color={colors.success} />
+                <Ionicons name="share-social" size={17} color={colors.success} />
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={[styles.headerButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                style={[styles.headerButton, { backgroundColor: colors.errorLight }]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   Alert.alert(
@@ -189,7 +265,7 @@ export default function StoreDetailScreen() {
                 }}
                 disabled={loading}
               >
-                <Ionicons name="trash" size={18} color={colors.error} />
+                <Ionicons name="trash" size={17} color={colors.error} />
               </TouchableOpacity>
             </View>
           )
@@ -203,166 +279,399 @@ export default function StoreDetailScreen() {
         </View>
       )}
 
-      {showShareModal && (
-        <View style={styles.editModal}>
-          <View style={[styles.editModalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.editModalTitle, { color: colors.text }]}>Share Store</Text>
-            <Text style={[styles.shareInstructions, { color: colors.textLight }]}>
-              Select who to share with:
-            </Text>
-            
-            {allUsers.map(u => (
-              <TouchableOpacity
-                key={u.uid}
-                style={[styles.userOption, { backgroundColor: colors.background, borderColor: colors.border }]}
-                onPress={async () => {
-                  try {
-                    await shareStoreWithUser(store.id, u.uid);
-                    Alert.alert('Success', `Shared with ${u.displayName}!`);
-                    setShowShareModal(false);
-                  } catch (error: any) {
-                    Alert.alert('Error', error.message);
-                  }
-                }}
-                disabled={loading}
-              >
-                <Text style={[styles.userOptionText, { color: colors.text }]}>
-                  {u.displayName} ({u.email})
-                </Text>
-              </TouchableOpacity>
-            ))}
-            
-            <TouchableOpacity
-              style={[styles.editModalButton, { backgroundColor: colors.textLight }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowShareModal(false);
-              }}
-              disabled={loading}
-            >
-              <Text style={styles.editModalButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Store Info Section */}
-      {(store.rating || store.phone || openStatus) && (
-        <View style={[styles.storeInfoContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {store.rating && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: colors.text }]}>⭐ Rating:</Text>
-              <Text style={[styles.infoText, { color: colors.text }]}>{store.rating.toFixed(1)} / 5.0</Text>
-            </View>
-          )}
-          
-          {openStatus && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: colors.text }]}>🕐 Today:</Text>
-              <Text style={[
-                styles.infoText, 
-                { color: colors.text },
-                openStatus.isOpen === true && { color: colors.success, fontWeight: '600' },
-                openStatus.isOpen === false && { color: colors.error, fontWeight: '600' }
-              ]}>
-                {openStatus.isOpen === true ? '✓ Open' : openStatus.isOpen === false ? '✗ Closed' : openStatus.text}
-                {openStatus.isOpen !== null && ` • ${openStatus.text}`}
-              </Text>
-            </View>
-          )}
-          
-          {store.phone && (
-            <TouchableOpacity 
-              style={styles.infoRow}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Linking.openURL(`tel:${store.phone}`);
-              }}
-            >
-              <Text style={[styles.infoLabel, { color: colors.text }]}>📞 Phone:</Text>
-              <Text style={[styles.infoText, { color: colors.primary, textDecorationLine: 'underline' }]}>{store.phone}</Text>
-            </TouchableOpacity>
-          )}
-
-          {store.website && (
-            <TouchableOpacity 
-              style={styles.infoRow}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const url = store.website?.startsWith('http') ? store.website : `https://${store.website}`;
-                Linking.openURL(url);
-              }}
-            >
-              <Text style={[styles.infoLabel, { color: colors.text }]}>🌐 Website:</Text>
-              <Text style={[styles.infoText, { color: colors.primary, textDecorationLine: 'underline' }]} numberOfLines={1}>
-                {store.website}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      <View style={[styles.addItemContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <TextInput 
-          style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]} 
-          placeholderTextColor={colors.textLight}
-          placeholder="Add item..."
-          value={newItemText}
-          onChangeText={setNewItemText}
-          onSubmitEditing={handleAddItem}
-          editable={!loading}
-        />
-        <Button 
-          title={loading ? "..." : "Add"} 
-          onPress={handleAddItem} 
-          color={colors.primary}
-          disabled={loading}
-        />
-      </View>
-
       <FlatList
-        data={store.items}
+        data={sortedItems}
         keyExtractor={item => item.id}
-		contentContainerStyle={{ paddingBottom: 100 }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.itemCard, 
-              { backgroundColor: colors.card, borderColor: colors.border },
-              item.checked && { backgroundColor: colors.success + '20', borderColor: colors.success }
-            ]}
-            onPress={() => handleToggleItem(item.id)}
-            onLongPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              Alert.alert(
-                'Delete Item',
-                `Remove "${item.text}"?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { 
-                    text: 'Delete', 
-                    style: 'destructive',
-                    onPress: () => handleDeleteItem(item.id)
-                  }
-                ]
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View>
+            {/* Store Info Card */}
+            {(store.rating || store.phone || openStatus || store.website) && (
+              <View style={[styles.infoCard, elevation(1), { backgroundColor: colors.surface }]}>
+                {store.rating && (
+                  <View style={styles.infoItem}>
+                    <Ionicons name="star" size={16} color="#F59E0B" />
+                    <Text style={[styles.infoItemText, { color: colors.text }]}>
+                      {store.rating.toFixed(1)} / 5.0
+                    </Text>
+                  </View>
+                )}
+                
+                {openStatus && (
+                  <View style={styles.infoItem}>
+                    <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+                    <Text style={[
+                      styles.infoItemText,
+                      { color: colors.text },
+                      openStatus.isOpen === true && { color: colors.success, fontWeight: '600' },
+                      openStatus.isOpen === false && { color: colors.error, fontWeight: '600' },
+                    ]}>
+                      {openStatus.isOpen === true ? 'Open' : openStatus.isOpen === false ? 'Closed' : ''}
+                      {openStatus.isOpen !== null ? ` · ${openStatus.text}` : openStatus.text}
+                    </Text>
+                  </View>
+                )}
+                
+                {store.phone && (
+                  <TouchableOpacity 
+                    style={styles.infoItem}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Linking.openURL(`tel:${store.phone}`);
+                    }}
+                  >
+                    <Ionicons name="call-outline" size={16} color={colors.primary} />
+                    <Text style={[styles.infoItemText, { color: colors.primary }]}>{store.phone}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {store.website && (
+                  <TouchableOpacity 
+                    style={styles.infoItem}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      const url = store.website?.startsWith('http') ? store.website : `https://${store.website}`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    <Ionicons name="globe-outline" size={16} color={colors.primary} />
+                    <Text style={[styles.infoItemText, { color: colors.primary }]} numberOfLines={1}>
+                      {store.website}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Progress bar */}
+            {totalItems > 0 && (
+              <View style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
+                    {checkedItems.length} of {totalItems} completed
+                  </Text>
+                  <Text style={[styles.progressPercent, { color: colors.primary }]}>
+                    {Math.round(progress * 100)}%
+                  </Text>
+                </View>
+                <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
+                  <Animated.View 
+                    style={[
+                      styles.progressFill, 
+                      { 
+                        backgroundColor: progress === 1 ? colors.success : colors.primary,
+                        width: `${progress * 100}%`,
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* Spending Summary */}
+            {(() => {
+              const pricedItems = store.items.filter(i => i.price != null && i.price > 0);
+              const storeTotal = pricedItems.reduce((sum, i) => sum + (i.price || 0), 0);
+              const remainingTotal = pricedItems.filter(i => !i.checked).reduce((sum, i) => sum + (i.price || 0), 0);
+              
+              if (pricedItems.length === 0) return null;
+              
+              return (
+                <View style={[styles.spendingCard, { backgroundColor: colors.primary + '08' }]}>
+                  <View style={styles.spendingRow}>
+                    <View style={styles.spendingStat}>
+                      <Text style={[styles.spendingAmount, { color: colors.text }]}>
+                        ${storeTotal.toFixed(2)}
+                      </Text>
+                      <Text style={[styles.spendingLabel, { color: colors.textMuted }]}>Total</Text>
+                    </View>
+                    <View style={[styles.spendingDivider, { backgroundColor: colors.borderLight }]} />
+                    <View style={styles.spendingStat}>
+                      <Text style={[styles.spendingAmount, { color: remainingTotal > 0 ? colors.primary : colors.success }]}>
+                        ${remainingTotal.toFixed(2)}
+                      </Text>
+                      <Text style={[styles.spendingLabel, { color: colors.textMuted }]}>Remaining</Text>
+                    </View>
+                    <View style={[styles.spendingDivider, { backgroundColor: colors.borderLight }]} />
+                    <View style={styles.spendingStat}>
+                      <Text style={[styles.spendingAmount, { color: colors.textSecondary }]}>
+                        ${pricedItems.length > 0 ? (storeTotal / pricedItems.length).toFixed(2) : '0.00'}
+                      </Text>
+                      <Text style={[styles.spendingLabel, { color: colors.textMuted }]}>Avg/item</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.viewSpendingLink}
+                    onPress={() => router.push('/spending')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="analytics-outline" size={14} color={colors.primary} />
+                    <Text style={[styles.viewSpendingText, { color: colors.primary }]}>View all spending</Text>
+                  </TouchableOpacity>
+                </View>
               );
-            }}
-            disabled={loading}
-          >
-            <Text style={[
-              styles.itemText, 
-              { color: colors.text },
-              item.checked && { color: colors.textLight, textDecorationLine: 'line-through' }
-            ]}>
-              {item.checked ? '✓ ' : ''}{item.text}
-            </Text>
-          </TouchableOpacity>
-        )}
+            })()}
+
+            {/* Add Item Input */}
+            <View style={[styles.addItemSection, elevation(1), { backgroundColor: colors.surface }]}>
+              <TextInput
+                style={[styles.addInput, { 
+                  backgroundColor: colors.surfaceAlt, 
+                  borderColor: colors.borderLight,
+                  color: colors.text,
+                }]}
+                placeholderTextColor={colors.textMuted}
+                placeholder="Add an item..."
+                value={newItemText}
+                onChangeText={setNewItemText}
+                onSubmitEditing={handleAddItem}
+                returnKeyType="done"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.addButton, 
+                  { backgroundColor: newItemText.trim() ? colors.primary : colors.border }
+                ]}
+                onPress={handleAddItem}
+                disabled={!newItemText.trim() || loading}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={22} color={colors.textInverse} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Divider label for unchecked */}
+            {uncheckedItems.length > 0 && (
+              <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                To get ({uncheckedItems.length})
+              </Text>
+            )}
+          </View>
+        }
+        renderItem={({ item, index }) => {
+          // Insert divider between unchecked and checked sections
+          const isFirstChecked = item.checked && index === uncheckedItems.length;
+          
+          return (
+            <>
+              {isFirstChecked && checkedItems.length > 0 && (
+                <View style={styles.checkedSectionHeader}>
+                  <Text style={[styles.sectionLabel, { color: colors.textMuted, marginHorizontal: 0, marginTop: 0, marginBottom: 0 }]}>
+                    Completed ({checkedItems.length})
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.clearButton, { backgroundColor: colors.error + '10' }]}
+                    onPress={() => {
+                      Alert.alert(
+                        'Clear Completed',
+                        `Remove ${checkedItems.length} completed item${checkedItems.length !== 1 ? 's' : ''}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Clear', 
+                            style: 'destructive',
+                            onPress: async () => {
+                              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                              setLoading(true);
+                              try {
+                                await clearCheckedItems(store.id);
+                              } finally {
+                                setLoading(false);
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" size={14} color={colors.error} />
+                    <Text style={[styles.clearButtonText, { color: colors.error }]}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <SwipeableItemRow
+                item={item}
+                onToggle={handleToggleItem}
+                onDelete={handleDeleteItem}
+                onInfoPress={handleInfoPress}
+                colors={colors}
+                disabled={loading}
+              />
+            </>
+          );
+        }}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: colors.textLight }]}>No items yet. Add some!</Text>
+          <View style={styles.emptyItems}>
+            <Ionicons name="basket-outline" size={40} color={colors.textMuted} />
+            <Text style={[styles.emptyItemsText, { color: colors.textSecondary }]}>
+              No items yet — add some above
+            </Text>
+          </View>
         }
       />
+
+      {/* ── Item Info/Edit Modal ─────────────── */}
+      <Modal
+        visible={selectedItem !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedItem(null)}
+      >
+        <TouchableOpacity 
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          activeOpacity={1}
+          onPress={() => setSelectedItem(null)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <Animated.View 
+              entering={FadeIn.duration(200)}
+              style={[styles.modalContent, elevation(4), { backgroundColor: colors.surface }]}
+            >
+              <View style={styles.modalHandle} />
+              
+              {/* Editable item name */}
+              <View style={styles.modalField}>
+                <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Item Name</Text>
+                <TextInput
+                  style={[styles.modalNameInput, { 
+                    backgroundColor: colors.surfaceAlt, 
+                    borderColor: colors.borderLight,
+                    color: colors.text,
+                  }]}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Item name"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="sentences"
+                  returnKeyType="next"
+                />
+              </View>
+
+              {/* Price input */}
+              <View style={styles.modalField}>
+                <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Price</Text>
+                <View style={[styles.modalInputRow, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight }]}>
+                  <Text style={[styles.currencySymbol, { color: colors.textMuted }]}>$</Text>
+                  <TextInput
+                    style={[styles.modalInput, { color: colors.text }]}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={editPrice}
+                    onChangeText={setEditPrice}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+
+              {/* Note input */}
+              <View style={styles.modalField}>
+                <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Note</Text>
+                <TextInput
+                  style={[styles.modalNoteInput, { 
+                    backgroundColor: colors.surfaceAlt, 
+                    borderColor: colors.borderLight,
+                    color: colors.text,
+                  }]}
+                  placeholder="Add a note..."
+                  placeholderTextColor={colors.textMuted}
+                  value={editNote}
+                  onChangeText={setEditNote}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Actions */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalCancelButton, { borderColor: colors.border }]}
+                  onPress={() => setSelectedItem(null)}
+                >
+                  <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSaveButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSaveItemDetails}
+                >
+                  <Text style={[styles.modalSaveText, { color: colors.textInverse }]}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── Share Modal ──────────────────────── */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <TouchableOpacity 
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          activeOpacity={1}
+          onPress={() => setShowShareModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <Animated.View 
+              entering={FadeIn.duration(200)}
+              style={[styles.modalContent, elevation(4), { backgroundColor: colors.surface }]}
+            >
+              <View style={styles.modalHandle} />
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Share Store</Text>
+              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+                Select who to share this list with
+              </Text>
+              
+              {allUsers.length === 0 ? (
+                <Text style={[styles.noUsersText, { color: colors.textMuted }]}>
+                  No other users found
+                </Text>
+              ) : (
+                allUsers.map(u => (
+                  <TouchableOpacity
+                    key={u.uid}
+                    style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
+                    onPress={async () => {
+                      try {
+                        await shareStoreWithUser(store.id, u.uid);
+                        Alert.alert('Success', `Shared with ${u.displayName}!`);
+                        setShowShareModal(false);
+                      } catch (error: any) {
+                        Alert.alert('Error', error.message);
+                      }
+                    }}
+                    disabled={loading}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.userAvatar, { backgroundColor: colors.primary + '15' }]}>
+                      <Ionicons name="person-outline" size={18} color={colors.primary} />
+                    </View>
+                    <View style={styles.userInfo}>
+                      <Text style={[styles.userName, { color: colors.text }]}>{u.displayName}</Text>
+                      <Text style={[styles.userEmail, { color: colors.textMuted }]}>{u.email}</Text>
+                    </View>
+                    <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+                  </TouchableOpacity>
+                ))
+              )}
+
+              <TouchableOpacity
+                style={[styles.modalCancelButton, { borderColor: colors.border, marginTop: spacing.lg }]}
+                onPress={() => setShowShareModal(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Close</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -370,115 +679,322 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  listContent: {
+    paddingBottom: 100,
+  },
+
+  // ── Header Buttons ─────────────────────────────
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginRight: 4,
+  },
+  headerButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Loading ────────────────────────────────────
   loadingOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999,
   },
-  storeInfoContainer: {
-    padding: 16,
-    borderBottomWidth: 2,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    width: 90,
-  },
-  infoText: {
+
+  // ── Not Found ──────────────────────────────────
+  notFoundState: {
     flex: 1,
-    fontSize: 14,
-  },
-  addItemContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 8,
-    borderBottomWidth: 2,
-  },
-  input: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    fontSize: 16,
-  },
-  itemCard: {
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 12,
-    borderWidth: 2,
-  },
-  itemText: {
-    fontSize: 16,
-  },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 16,
-  },
-  editModal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
+    gap: spacing.md,
   },
-  editModalContent: {
-    padding: 24,
-    borderRadius: 12,
-    width: '80%',
+  notFoundText: {
+    ...typography.body,
+  },
+
+  // ── Store Info Card ────────────────────────────
+  infoCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm + 2,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  infoItemText: {
+    ...typography.body,
+    flex: 1,
+  },
+
+  // ── Progress ───────────────────────────────────
+  progressSection: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  progressLabel: {
+    ...typography.small,
+  },
+  progressPercent: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+
+  // ── Spending Summary ───────────────────────────
+  spendingCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  spendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  spendingStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  spendingAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  spendingLabel: {
+    ...typography.small,
+    marginTop: 2,
+  },
+  spendingDivider: {
+    width: 1,
+    height: 28,
+  },
+  viewSpendingLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  viewSpendingText: {
+    ...typography.small,
+    fontWeight: '600',
+  },
+
+  // ── Add Item ───────────────────────────────────
+  addItemSection: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  addInput: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    ...typography.body,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ── Section Labels ─────────────────────────────
+  sectionLabel: {
+    ...typography.small,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  checkedSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  clearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.full,
+  },
+  clearButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // ── Empty Items ────────────────────────────────
+  emptyItems: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl * 2,
+    gap: spacing.md,
+  },
+  emptyItemsText: {
+    ...typography.body,
+  },
+
+  // ── Modals ─────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
     maxHeight: '80%',
   },
-  editModalTitle: {
-    fontSize: 18,
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
+  },
+  modalTitle: {
+    ...typography.title,
+    marginBottom: spacing.sm,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    marginBottom: spacing.lg,
+  },
+
+  // ── Info Modal Fields ──────────────────────────
+  modalField: {
+    marginBottom: spacing.lg,
+  },
+  modalLabel: {
+    ...typography.caption,
+    marginBottom: spacing.sm,
+  },
+  modalNameInput: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    ...typography.subtitle,
     fontWeight: '600',
-    marginBottom: 16,
   },
-  shareInstructions: {
-    fontSize: 14,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  editModalButton: {
-    padding: 12,
-    borderRadius: 8,
+  modalInputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
   },
-  editModalButtonText: {
-    color: 'white',
-    fontWeight: '600',
+  currencySymbol: {
+    ...typography.body,
+    marginRight: spacing.xs,
   },
-  userOption: {
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 2,
+  modalInput: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    ...typography.body,
   },
-  userOptionText: {
-    fontSize: 16,
+  modalNoteInput: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    ...typography.body,
+    textAlignVertical: 'top',
+    minHeight: 80,
   },
-  headerButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  modalCancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    ...typography.button,
+  },
+  modalSaveButton: {
+    flex: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    ...typography.button,
+  },
+
+  // ── Share Modal ────────────────────────────────
+  noUsersText: {
+    ...typography.body,
+    textAlign: 'center',
+    paddingVertical: spacing.xl,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md + 2,
+    borderBottomWidth: 1,
+    gap: spacing.md,
+  },
+  userAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    ...typography.bodyBold,
+  },
+  userEmail: {
+    ...typography.small,
+    marginTop: 1,
   },
 });

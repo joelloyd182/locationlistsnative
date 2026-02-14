@@ -1,16 +1,71 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Platform, TextInput } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme, THEMES, ThemeId } from '../../context/ThemeContext';
+import { useTheme, THEMES, THEME_NAMES, ThemeId, elevation, spacing, radius, typography } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { useState, useEffect } from 'react';
 import { DataManagementSection } from '../../components/DataManagementSection';
 import { useWeekStart, WEEK_START_OPTIONS, WeekStartDay } from '../../context/WeekStartContext';
+import { useBudget, BudgetPeriod } from '../../context/BudgetContext';
+import { useRouter } from 'expo-router';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+// ── Section Header Component ─────────────────────
+function SectionHeader({ icon, title, subtitle, colors }: { 
+  icon: string; title: string; subtitle?: string; colors: any 
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={[styles.sectionIconContainer, { backgroundColor: colors.primary + '12' }]}>
+        <Ionicons name={icon as any} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.sectionHeaderText}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        {subtitle && (
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ── Info Row Component ───────────────────────────
+function InfoRow({ label, value, valueColor, icon, onPress, colors, isLast = false }: {
+  label: string; value: string; valueColor?: string; icon?: string;
+  onPress?: () => void; colors: any; isLast?: boolean;
+}) {
+  const content = (
+    <View style={[
+      styles.infoRow,
+      !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderLight }
+    ]}>
+      <Text style={[styles.infoLabel, { color: colors.text }]}>{label}</Text>
+      <View style={styles.infoValueRow}>
+        <Text style={[
+          styles.infoValue, 
+          { color: valueColor || colors.textSecondary }
+        ]} numberOfLines={1}>
+          {value}
+        </Text>
+        {icon && <Ionicons name={icon as any} size={16} color={colors.textMuted} style={{ marginLeft: 4 }} />}
+      </View>
+    </View>
+  );
+
+  if (onPress) {
+    return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{content}</TouchableOpacity>;
+  }
+  return content;
+}
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
   const { themeId, colors, setTheme } = useTheme();
   const { weekStartDay, setWeekStartDay } = useWeekStart();
+  const { budgetTarget, budgetPeriod, setBudgetTarget, setBudgetPeriod } = useBudget();
+  const router = useRouter();
   const [notificationStatus, setNotificationStatus] = useState<string>('checking...');
 
   useEffect(() => {
@@ -25,7 +80,6 @@ export default function SettingsScreen() {
   const selectTheme = async (newThemeId: ThemeId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await setTheme(newThemeId);
-    Alert.alert('Theme Changed', 'Your new theme is active!');
   };
 
   const handleSignOut = async () => {
@@ -35,11 +89,7 @@ export default function SettingsScreen() {
       'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Sign Out', 
-          style: 'destructive',
-          onPress: async () => await signOut()
-        }
+        { text: 'Sign Out', style: 'destructive', onPress: async () => await signOut() }
       ]
     );
   };
@@ -50,11 +100,7 @@ export default function SettingsScreen() {
     const { status: currentStatus } = await Notifications.getPermissionsAsync();
     
     if (currentStatus === 'granted') {
-      Alert.alert(
-        'Notifications Enabled',
-        'Notifications are already enabled for this app.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Notifications Enabled', 'Notifications are already enabled for this app.');
       return;
     }
 
@@ -63,171 +109,279 @@ export default function SettingsScreen() {
     if (status === 'granted') {
       setNotificationStatus(status);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success!', 'Notification permissions granted! You\'ll now receive alerts when you arrive at stores.');
+      Alert.alert('Success!', "You'll now receive alerts when you arrive at stores.");
     } else {
       Alert.alert(
         'Notifications Disabled',
-        'To enable notifications, go to your phone Settings → Apps → Location Lists → Notifications',
-        [{ text: 'OK' }]
+        'To enable notifications, go to your phone Settings → Apps → Location Lists → Notifications'
       );
     }
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Account Section */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-            <Text style={[styles.value, { color: colors.textLight }]}>{user?.email}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.text }]}>User ID</Text>
-            <Text style={[styles.value, styles.smallText, { color: colors.textLight }]} numberOfLines={1}>
-              {user?.uid}
-            </Text>
-          </View>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Account Section ──────────────────── */}
+      <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.section}>
+        <SectionHeader icon="person-outline" title="Account" colors={colors} />
+        <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          <InfoRow 
+            label="Email" 
+            value={user?.email || 'Not signed in'} 
+            colors={colors}
+          />
+          <InfoRow 
+            label="User ID" 
+            value={user?.uid || '—'} 
+            colors={colors}
+            isLast
+          />
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Notifications Section */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Notifications</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Enable notifications to get alerts when you arrive at stores
-        </Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Status</Text>
-            <Text style={[
-              styles.value, 
-              { 
-                color: notificationStatus === 'granted' ? colors.success : colors.error,
-                fontWeight: '600'
-              }
-            ]}>
-              {notificationStatus === 'granted' ? '✓ Enabled' : '✗ Disabled'}
-            </Text>
-          </View>
+      {/* ── Notifications Section ────────────── */}
+      <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.section}>
+        <SectionHeader 
+          icon="notifications-outline" 
+          title="Notifications" 
+          subtitle="Get alerts when you arrive at stores"
+          colors={colors} 
+        />
+        <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          <InfoRow 
+            label="Status" 
+            value={notificationStatus === 'granted' ? 'Enabled' : 'Disabled'}
+            valueColor={notificationStatus === 'granted' ? colors.success : colors.error}
+            colors={colors}
+            isLast
+          />
         </View>
         
         {notificationStatus !== 'granted' && (
           <TouchableOpacity 
-            style={[styles.enableButton, { backgroundColor: colors.success }]} 
+            style={[styles.actionButton, { backgroundColor: colors.primary }]} 
             onPress={handleNotificationPermissions}
+            activeOpacity={0.8}
           >
-            <Text style={styles.enableButtonText}>🔔 Enable Notifications</Text>
+            <Ionicons name="notifications" size={18} color={colors.textInverse} />
+            <Text style={[styles.actionButtonText, { color: colors.textInverse }]}>Enable Notifications</Text>
           </TouchableOpacity>
         )}
 
-        <Text style={[styles.helpText, { color: colors.textLight }]}>
-          Geofencing notifications are controlled from the Home screen
+        <Text style={[styles.hint, { color: colors.textMuted }]}>
+          Location tracking is controlled from the Home screen
         </Text>
-      </View>
+      </Animated.View>
 
-      {/* Week Start Day Section - NEW! */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Week Settings</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Choose which day your week starts
-        </Text>
-        
-        <View style={styles.weekStartGrid}>
-          {WEEK_START_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={[
-                styles.weekStartButton,
-                { backgroundColor: colors.card, borderColor: colors.border },
-                weekStartDay === option.value && { 
-                  borderColor: colors.primary, 
-                  borderWidth: 3,
-                  backgroundColor: colors.tertiary 
-                }
-              ]}
-              onPress={async () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                await setWeekStartDay(option.value as WeekStartDay);
-                Alert.alert('Week Start Updated', `Your week now starts on ${option.label}`);
-              }}
-            >
-              <Text style={[
-                styles.weekStartLabel,
-                { color: weekStartDay === option.value ? colors.primary : colors.text }
-              ]}>
-                {option.label}
-              </Text>
-              {weekStartDay === option.value && (
-                <Text style={[styles.activeIndicator, { color: colors.primary }]}>✓</Text>
-              )}
-            </TouchableOpacity>
-          ))}
+      {/* ── Week Settings Section ────────────── */}
+      <Animated.View entering={FadeInDown.delay(150).duration(400)} style={styles.section}>
+        <SectionHeader 
+          icon="calendar-outline" 
+          title="Week Start" 
+          subtitle="Choose which day your shopping week begins"
+          colors={colors} 
+        />
+        <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          {WEEK_START_OPTIONS.map((option, index) => {
+            const isSelected = weekStartDay === option.value;
+            const isLast = index === WEEK_START_OPTIONS.length - 1;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.weekDayRow,
+                  !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+                ]}
+                onPress={async () => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  await setWeekStartDay(option.value as WeekStartDay);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.weekDayLabel,
+                  { color: isSelected ? colors.primary : colors.text }
+                ]}>
+                  {option.label}
+                </Text>
+                {isSelected && (
+                  <View style={[styles.selectedIndicator, { backgroundColor: colors.primary }]}>
+                    <Ionicons name="checkmark" size={14} color={colors.textInverse} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Theme Section */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Theme</Text>
-        <Text style={[styles.sectionDescription, { color: colors.textLight }]}>
-          Choose your color scheme (applies instantly!)
-        </Text>
+      {/* ── Budget Section ─────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(175).duration(400)} style={styles.section}>
+        <SectionHeader 
+          icon="wallet-outline" 
+          title="Budget" 
+          subtitle="Set a spending target to track your grocery costs"
+          colors={colors} 
+        />
+        <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          <View style={[styles.budgetRow, { borderBottomWidth: 1, borderBottomColor: colors.borderLight }]}>
+            <Text style={[styles.budgetRowLabel, { color: colors.text }]}>Target Amount</Text>
+            <View style={styles.budgetInputRow}>
+              <Text style={[styles.budgetCurrency, { color: colors.textMuted }]}>$</Text>
+              <TextInput
+                style={[styles.budgetInput, { color: colors.text }]}
+                value={budgetTarget !== null ? budgetTarget.toString() : ''}
+                onChangeText={(text) => {
+                  const num = parseFloat(text);
+                  if (text === '') {
+                    setBudgetTarget(null);
+                  } else if (!isNaN(num) && num >= 0) {
+                    setBudgetTarget(num);
+                  }
+                }}
+                keyboardType="decimal-pad"
+                placeholder="No limit"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+          </View>
+          <View style={styles.budgetRow}>
+            <Text style={[styles.budgetRowLabel, { color: colors.text }]}>Period</Text>
+            <View style={styles.budgetPeriodButtons}>
+              {(['weekly', 'monthly'] as const).map((period) => {
+                const isActive = budgetPeriod === period;
+                return (
+                  <TouchableOpacity
+                    key={period}
+                    style={[
+                      styles.budgetPeriodButton,
+                      { backgroundColor: isActive ? colors.primary : colors.surfaceAlt }
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setBudgetPeriod(period);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.budgetPeriodText,
+                      { color: isActive ? colors.textInverse : colors.textSecondary }
+                    ]}>
+                      {period.charAt(0).toUpperCase() + period.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.viewSpendingRow, { borderTopWidth: 1, borderTopColor: colors.borderLight }]}
+            onPress={() => router.push('/spending')}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="analytics-outline" size={18} color={colors.primary} />
+            <Text style={[styles.viewSpendingLabel, { color: colors.primary }]}>View Spending Details</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+
+      {/* ── Theme Section ────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.section}>
+        <SectionHeader 
+          icon="color-palette-outline" 
+          title="Theme" 
+          subtitle="Changes apply instantly"
+          colors={colors} 
+        />
         <View style={styles.themesGrid}>
-          {Object.entries(THEMES).map(([id, theme]) => (
-            <TouchableOpacity
-              key={id}
-              style={[
-                styles.themeCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-                themeId === id && { borderColor: theme.primary, borderWidth: 3 }
-              ]}
-              onPress={() => selectTheme(id as ThemeId)}
-            >
-              <View style={styles.themeColors}>
-                <View style={[styles.colorSwatch, { backgroundColor: theme.primary }]} />
-                <View style={[styles.colorSwatch, { backgroundColor: theme.secondary }]} />
-                <View style={[styles.colorSwatch, { backgroundColor: theme.tertiary }]} />
-                <View style={[styles.colorSwatch, { backgroundColor: theme.accent }]} />
-              </View>
-              <Text style={[styles.themeName, { color: colors.text }]}>
-                {id.charAt(0).toUpperCase() + id.slice(1)}
-              </Text>
-              {themeId === id && (
-                <Text style={[styles.activeIndicator, { color: theme.primary }]}>✓</Text>
-              )}
-            </TouchableOpacity>
-          ))}
+          {(Object.keys(THEMES) as ThemeId[]).map((id, index) => {
+            const theme = THEMES[id];
+            const isSelected = themeId === id;
+            const isDark = id === 'midnight';
+            
+            return (
+              <TouchableOpacity
+                key={id}
+                style={[
+                  styles.themeCard,
+                  elevation(isSelected ? 3 : 1),
+                  { backgroundColor: colors.surface },
+                  isSelected && { borderWidth: 2, borderColor: theme.primary }
+                ]}
+                onPress={() => selectTheme(id)}
+                activeOpacity={0.7}
+              >
+                {/* Mini preview */}
+                <View style={[styles.themePreview, { backgroundColor: theme.background }]}>
+                  {/* Fake mini header gradient */}
+                  <LinearGradient
+                    colors={theme.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.themePreviewHeader}
+                  />
+                  {/* Fake content lines */}
+                  <View style={styles.themePreviewContent}>
+                    <View style={[styles.themePreviewLine, { backgroundColor: theme.surface, width: '80%' }]} />
+                    <View style={[styles.themePreviewLine, { backgroundColor: theme.surface, width: '60%' }]} />
+                  </View>
+                </View>
+                
+                {/* Color dots */}
+                <View style={styles.themeColorDots}>
+                  <View style={[styles.colorDot, { backgroundColor: theme.primary }]} />
+                  <View style={[styles.colorDot, { backgroundColor: theme.secondary }]} />
+                  <View style={[styles.colorDot, { backgroundColor: theme.accent }]} />
+                </View>
+                
+                {/* Name + check */}
+                <View style={styles.themeNameRow}>
+                  <Text style={[styles.themeName, { color: colors.text }]}>
+                    {THEME_NAMES[id]}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={18} color={theme.primary} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Data Management Section */}
-      <DataManagementSection />
+      {/* ── Data Management Section ──────────── */}
+      <Animated.View entering={FadeInDown.delay(250).duration(400)}>
+        <DataManagementSection />
+      </Animated.View>
 
-      {/* About Section */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Version</Text>
-            <Text style={[styles.value, { color: colors.textLight }]}>1.0.0</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Build</Text>
-            <Text style={[styles.value, { color: colors.textLight }]}>Development</Text>
-          </View>
+      {/* ── About Section ────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(300).duration(400)} style={styles.section}>
+        <SectionHeader icon="information-circle-outline" title="About" colors={colors} />
+        <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+          <InfoRow label="Version" value="1.0.0" colors={colors} />
+          <InfoRow label="Build" value="Development" colors={colors} isLast />
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Sign Out Button */}
-      <View style={styles.section}>
-        <TouchableOpacity style={[styles.signOutButton, { backgroundColor: colors.error }]} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+      {/* ── Sign Out ─────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(350).duration(400)} style={styles.section}>
+        <TouchableOpacity 
+          style={[styles.signOutButton, { backgroundColor: colors.errorLight, borderColor: colors.error }]} 
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="log-out-outline" size={18} color={colors.error} />
+          <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
+      {/* Footer */}
       <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.textLight }]}>Made by Kooky Rooster Media 🐓</Text>
+        <Text style={[styles.footerText, { color: colors.textMuted }]}>Made by Kooky Rooster Media 🐓</Text>
       </View>
     </ScrollView>
   );
@@ -237,119 +391,233 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  contentContainer: {
+    paddingBottom: 40,
+  },
+
+  // ── Sections ───────────────────────────────────
   section: {
-    padding: 16,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sectionIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderText: {
+    flex: 1,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    ...typography.subtitle,
   },
-  sectionDescription: {
-    fontSize: 14,
-    marginBottom: 12,
+  sectionSubtitle: {
+    ...typography.small,
+    marginTop: 1,
   },
+
+  // ── Cards ──────────────────────────────────────
   card: {
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 2,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
+
+  // ── Info Rows ──────────────────────────────────
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + 2,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
+  infoLabel: {
+    ...typography.bodyBold,
   },
-  value: {
-    fontSize: 14,
+  infoValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
+    justifyContent: 'flex-end',
+    marginLeft: spacing.lg,
+  },
+  infoValue: {
+    ...typography.body,
     textAlign: 'right',
-    marginLeft: 16,
+    flexShrink: 1,
   },
-  smallText: {
-    fontSize: 10,
-  },
-  signOutButton: {
-    padding: 16,
-    borderRadius: 12,
+
+  // ── Action Buttons ─────────────────────────────
+  actionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md + 2,
+    borderRadius: radius.lg,
+    marginTop: spacing.md,
   },
-  signOutText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+  actionButtonText: {
+    ...typography.button,
   },
-  enableButton: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  enableButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  helpText: {
-    fontSize: 12,
-    marginTop: 12,
+  hint: {
+    ...typography.small,
     textAlign: 'center',
+    marginTop: spacing.md,
     fontStyle: 'italic',
   },
-  weekStartGrid: {
-    gap: 10,
-  },
-  weekStartButton: {
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 2,
+
+  // ── Week Day Rows ──────────────────────────────
+  weekDayRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md + 2,
   },
-  weekStartLabel: {
-    fontSize: 15,
+  weekDayLabel: {
+    ...typography.body,
+    fontWeight: '500',
+  },
+  selectedIndicator: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ── Budget Settings ─────────────────────────────
+  budgetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.lg,
+  },
+  budgetRowLabel: {
+    ...typography.body,
+  },
+  budgetInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  budgetCurrency: {
+    ...typography.body,
+    fontWeight: '600',
+    marginRight: 2,
+  },
+  budgetInput: {
+    ...typography.body,
+    fontWeight: '600',
+    textAlign: 'right',
+    minWidth: 80,
+    paddingVertical: spacing.sm,
+  },
+  budgetPeriodButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  budgetPeriodButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
+  },
+  budgetPeriodText: {
+    ...typography.caption,
     fontWeight: '600',
   },
+  viewSpendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md + 2,
+    paddingHorizontal: spacing.lg,
+  },
+  viewSpendingLabel: {
+    ...typography.bodyBold,
+    flex: 1,
+  },
+
+  // ── Theme Picker ───────────────────────────────
   themesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   themeCard: {
     width: '47%',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 2,
-    alignItems: 'center',
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
-  themeColors: {
-    flexDirection: 'row',
-    gap: 4,
-    marginBottom: 8,
+  themePreview: {
+    height: 56,
+    overflow: 'hidden',
   },
-  colorSwatch: {
-    width: 20,
+  themePreviewHeader: {
     height: 20,
-    borderRadius: 4,
+    borderBottomLeftRadius: radius.sm,
+    borderBottomRightRadius: radius.sm,
+  },
+  themePreviewContent: {
+    padding: spacing.sm,
+    gap: 4,
+  },
+  themePreviewLine: {
+    height: 6,
+    borderRadius: 3,
+  },
+  themeColorDots: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm + 2,
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  themeNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
   themeName: {
-    fontSize: 14,
+    ...typography.caption,
     fontWeight: '600',
   },
-  activeIndicator: {
-    fontSize: 18,
-    marginTop: 4,
+
+  // ── Sign Out ───────────────────────────────────
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md + 2,
+    borderRadius: radius.lg,
+    borderWidth: 1,
   },
+  signOutText: {
+    ...typography.button,
+  },
+
+  // ── Footer ─────────────────────────────────────
   footer: {
-    padding: 32,
+    paddingVertical: spacing.xxxl,
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 12,
+    ...typography.small,
   },
 });

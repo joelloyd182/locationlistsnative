@@ -15,6 +15,7 @@ import { ThemeProvider as CustomThemeProvider, useTheme } from '../context/Theme
 import { OfflineBanner } from '../components/OfflineBanner';
 import { TemplatesProvider } from '../context/TemplatesContext';
 import { WeekStartProvider } from '../context/WeekStartContext';
+import { BudgetProvider } from '../context/BudgetContext';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -48,16 +49,16 @@ function RootLayoutNav() {
     return null; // Show nothing while checking auth
   }
 
-  // Create custom nav theme using our colors
+  // Create custom nav theme using our new theme tokens
   const navigationTheme = {
     ...DefaultTheme,
     colors: {
       ...DefaultTheme.colors,
       primary: colors.primary,
       background: colors.background,
-      card: colors.card,
-      text: colors.text,
-      border: colors.border,
+      card: colors.surface,          // Header background = surface (readable)
+      text: colors.text,             // Header title color
+      border: colors.borderLight,    // Subtle border under header
       notification: colors.primary,
     },
   };
@@ -66,7 +67,19 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={navigationTheme}>
       <OfflineBanner />
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text,
+          headerTitleStyle: {
+            color: colors.text,
+            fontWeight: '600',
+            fontSize: 17,
+          },
+          headerShadowVisible: false,
+          headerBackTitleVisible: false,
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
@@ -82,6 +95,7 @@ export default function RootLayout() {
     <CustomThemeProvider>
       <AuthProvider>
         <WeekStartProvider>
+		<BudgetProvider>
           <StoresProvider>
             <MealPlanProvider>
               <TemplatesProvider>
@@ -89,6 +103,7 @@ export default function RootLayout() {
               </TemplatesProvider>
             </MealPlanProvider>
           </StoresProvider>
+		  </BudgetProvider>
         </WeekStartProvider>
       </AuthProvider>
     </CustomThemeProvider>

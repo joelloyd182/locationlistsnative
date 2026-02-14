@@ -1,10 +1,11 @@
-import { StyleSheet, Text, View, TextInput, Button, Alert, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { StyleSheet, Text, View, TextInput, Alert, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { useState } from 'react';
 import { useStores } from '../context/StoresContext';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { AutocompleteDropdown } from 'react-native-autocomplete-dropdown';
 import { searchPlaces, getPlaceDetails } from '../services/googlePlaces';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 export default function AddStoreScreen() {
@@ -25,7 +26,6 @@ export default function AddStoreScreen() {
       setSuggestions([]);
       return;
     }
-
     try {
       const results = await searchPlaces(text);
       setSuggestions(results.map((place: any) => ({
@@ -39,7 +39,6 @@ export default function AddStoreScreen() {
 
   const handleSelectPlace = async (item: any) => {
     if (!item) return;
-
     try {
       const details = await getPlaceDetails(item.id);
       setSelectedPlace(details);
@@ -57,19 +56,15 @@ export default function AddStoreScreen() {
     }
 
     if (isOnline) {
-      // Online store - only needs name (and optionally website)
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-
       const success = await addStore({
         name: name.trim(),
         isOnline: true,
         website: website.trim() || undefined,
         items: [],
       });
-
       setLoading(false);
-
       if (success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setTimeout(() => router.back(), 100);
@@ -77,27 +72,23 @@ export default function AddStoreScreen() {
         Alert.alert('Error', 'Failed to add store');
       }
     } else {
-      // Physical store - needs location
       if (!selectedPlace) {
         Alert.alert('Error', 'Please select a store location');
         return;
       }
-
-      const radius = parseInt(triggerRadius);
-      if (isNaN(radius) || radius < 50 || radius > 1000) {
+      const rad = parseInt(triggerRadius);
+      if (isNaN(rad) || rad < 50 || rad > 1000) {
         Alert.alert('Error', 'Trigger radius must be between 50 and 1000 meters');
         return;
       }
-
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
-
       const success = await addStore({
         name: selectedPlace.name,
         isOnline: false,
         address: selectedPlace.formatted_address,
         location: selectedPlace.geometry.location,
-        triggerRadius: radius,
+        triggerRadius: rad,
         placeId: selectedPlace.place_id,
         phone: selectedPlace.formatted_phone_number,
         rating: selectedPlace.rating,
@@ -106,9 +97,7 @@ export default function AddStoreScreen() {
         photos: selectedPlace.photos?.slice(0, 3).map((p: any) => p.photo_reference),
         items: [],
       });
-
       setLoading(false);
-
       if (success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.back();
@@ -119,18 +108,31 @@ export default function AddStoreScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Online Store Toggle */}
-      <View style={[styles.toggleContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Stack.Screen options={{ title: 'Add Store' }} />
+
+      {/* Online/Physical Toggle */}
+      <View style={[styles.toggleCard, elevation(2), { backgroundColor: colors.surface }]}>
         <View style={styles.toggleRow}>
-          <View>
+          <View style={[styles.toggleIcon, { backgroundColor: isOnline ? colors.primary + '12' : colors.success + '15' }]}>
+            <Ionicons 
+              name={isOnline ? "globe-outline" : "storefront-outline"} 
+              size={22} 
+              color={isOnline ? colors.primary : colors.success} 
+            />
+          </View>
+          <View style={styles.toggleInfo}>
             <Text style={[styles.toggleLabel, { color: colors.text }]}>
-              {isOnline ? '🌐 Online Store' : '🏪 Physical Store'}
+              {isOnline ? 'Online Store' : 'Physical Store'}
             </Text>
-            <Text style={[styles.toggleDescription, { color: colors.textLight }]}>
+            <Text style={[styles.toggleDescription, { color: colors.textMuted }]}>
               {isOnline 
-                ? 'No location needed (e.g., Amazon, HelloFresh)'
-                : 'Has a physical location with geofencing'
+                ? 'No location needed (e.g., Amazon)'
+                : 'Has a location with geofencing'
               }
             </Text>
           </View>
@@ -144,112 +146,139 @@ export default function AddStoreScreen() {
               setWebsite('');
             }}
             trackColor={{ false: colors.border, true: colors.primary }}
-            thumbColor={isOnline ? colors.success : colors.textLight}
+            thumbColor="#FFFFFF"
           />
         </View>
       </View>
 
       {isOnline ? (
-        /* ONLINE STORE FORM */
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.text }]}>Store Name *</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-            placeholder="e.g., Amazon, HelloFresh"
-            placeholderTextColor={colors.textLight}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <Text style={[styles.label, { color: colors.text }]}>Website (Optional)</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-            placeholder="https://..."
-            placeholderTextColor={colors.textLight}
-            value={website}
-            onChangeText={setWebsite}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
-
-          <Text style={[styles.helpText, { color: colors.textLight }]}>
-            💡 Online stores don't use geofencing or location tracking
-          </Text>
-        </View>
-      ) : (
-        /* PHYSICAL STORE FORM */
-        <>
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text }]}>Search for Store *</Text>
-            <AutocompleteDropdown
-              clearOnFocus={false}
-              closeOnBlur={true}
-              closeOnSubmit={false}
-              onChangeText={handleSearch}
-              onSelectItem={handleSelectPlace}
-              dataSet={suggestions}
-              textInputProps={{
-                placeholder: 'Search stores...',
-                placeholderTextColor: colors.textLight,
-                style: {
-                  backgroundColor: colors.background,
-                  color: colors.text,
-                  paddingLeft: 12,
-                  borderRadius: 8,
-                  borderWidth: 2,
-                  borderColor: colors.border,
-                },
-              }}
-              inputContainerStyle={{
-                backgroundColor: colors.background,
-                borderRadius: 8,
-              }}
-              suggestionsListContainerStyle={{
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                borderWidth: 2,
-                borderRadius: 8,
-              }}
-              containerStyle={{ flexGrow: 1, flexShrink: 1 }}
+        /* ── Online Store Form ──────────────── */
+        <View style={[styles.formCard, elevation(2), { backgroundColor: colors.surface }]}>
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Store Name</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+              placeholder="e.g., Amazon, HelloFresh"
+              placeholderTextColor={colors.textMuted}
+              value={name}
+              onChangeText={setName}
             />
           </View>
 
-          {selectedPlace && (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.selectedTitle, { color: colors.text }]}>✓ Selected Store</Text>
-              <Text style={[styles.selectedName, { color: colors.primary }]}>{selectedPlace.name}</Text>
-              <Text style={[styles.selectedAddress, { color: colors.textLight }]}>{selectedPlace.formatted_address}</Text>
-              
-              <Text style={[styles.label, { color: colors.text, marginTop: 16 }]}>Trigger Radius (meters) *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-                placeholder="150"
-                placeholderTextColor={colors.textLight}
-                value={triggerRadius}
-                onChangeText={setTriggerRadius}
-                keyboardType="numeric"
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Website (optional)</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+              placeholder="https://..."
+              placeholderTextColor={colors.textMuted}
+              value={website}
+              onChangeText={setWebsite}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+          </View>
+
+          <View style={[styles.hint, { backgroundColor: colors.primary + '08' }]}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
+            <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+              Online stores don't use geofencing or location tracking
+            </Text>
+          </View>
+        </View>
+      ) : (
+        /* ── Physical Store Form ────────────── */
+        <>
+          <View style={[styles.formCard, elevation(2), { backgroundColor: colors.surface }]}>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Search for Store</Text>
+              <AutocompleteDropdown
+                clearOnFocus={false}
+                closeOnBlur={true}
+                closeOnSubmit={false}
+                onChangeText={handleSearch}
+                onSelectItem={handleSelectPlace}
+                dataSet={suggestions}
+                textInputProps={{
+                  placeholder: 'Search stores...',
+                  placeholderTextColor: colors.textMuted,
+                  style: {
+                    backgroundColor: colors.surfaceAlt,
+                    color: colors.text,
+                    paddingLeft: 12,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: colors.borderLight,
+                  },
+                }}
+                inputContainerStyle={{
+                  backgroundColor: colors.surfaceAlt,
+                  borderRadius: radius.md,
+                }}
+                suggestionsListContainerStyle={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: radius.md,
+                }}
+                containerStyle={{ flexGrow: 1, flexShrink: 1 }}
               />
-              <Text style={[styles.helpText, { color: colors.textLight }]}>
-                💡 You'll get notified when within {triggerRadius || '150'}m of this store
+            </View>
+          </View>
+
+          {selectedPlace && (
+            <View style={[styles.formCard, elevation(2), { backgroundColor: colors.surface }]}>
+              <View style={[styles.selectedBanner, { backgroundColor: colors.successLight }]}>
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                <Text style={[styles.selectedBannerText, { color: colors.success }]}>Store Selected</Text>
+              </View>
+              
+              <Text style={[styles.selectedName, { color: colors.text }]}>{selectedPlace.name}</Text>
+              <Text style={[styles.selectedAddress, { color: colors.textSecondary }]}>
+                {selectedPlace.formatted_address}
               </Text>
+              
+              <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+              
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Trigger Radius (meters)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+                  placeholder="150"
+                  placeholderTextColor={colors.textMuted}
+                  value={triggerRadius}
+                  onChangeText={setTriggerRadius}
+                  keyboardType="numeric"
+                />
+                <View style={[styles.hint, { backgroundColor: colors.primary + '08' }]}>
+                  <Ionicons name="navigate-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.hintText, { color: colors.textSecondary }]}>
+                    You'll get notified within {triggerRadius || '150'}m of this store
+                  </Text>
+                </View>
+              </View>
             </View>
           )}
         </>
       )}
 
+      {/* Save Button */}
       <TouchableOpacity
         style={[
           styles.saveButton,
-          { backgroundColor: colors.success },
+          { backgroundColor: colors.primary },
           loading && { opacity: 0.6 }
         ]}
         onPress={handleSave}
         disabled={loading}
+        activeOpacity={0.8}
       >
-        <Text style={styles.saveButtonText}>
-          {loading ? 'Saving...' : '💾 Save Store'}
+        <Ionicons name="checkmark" size={20} color={colors.textInverse} />
+        <Text style={[styles.saveButtonText, { color: colors.textInverse }]}>
+          {loading ? 'Saving...' : 'Save Store'}
         </Text>
       </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -257,73 +286,113 @@ export default function AddStoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
   },
-  toggleContainer: {
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 16,
-    marginBottom: 16,
+  scrollContent: {
+    padding: spacing.lg,
+  },
+
+  // ── Toggle Card ────────────────────────────────
+  toggleCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   toggleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.md,
+  },
+  toggleIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleInfo: {
+    flex: 1,
   },
   toggleLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...typography.bodyBold,
   },
   toggleDescription: {
-    fontSize: 13,
-    maxWidth: '80%',
+    ...typography.small,
+    marginTop: 2,
   },
-  card: {
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 16,
-    marginBottom: 16,
+
+  // ── Form Card ──────────────────────────────────
+  formCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 8,
+  fieldGroup: {
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
+    ...typography.caption,
+    marginBottom: spacing.sm,
   },
   input: {
-    borderWidth: 2,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md + 2 : spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    ...typography.body,
   },
-  helpText: {
-    fontSize: 13,
-    marginTop: 8,
-    fontStyle: 'italic',
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
   },
-  selectedTitle: {
-    fontSize: 14,
+  hintText: {
+    ...typography.small,
+    flex: 1,
+  },
+
+  // ── Selected Place ─────────────────────────────
+  selectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    alignSelf: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  selectedBannerText: {
+    ...typography.caption,
     fontWeight: '600',
-    marginBottom: 8,
   },
   selectedName: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...typography.subtitle,
+    marginBottom: spacing.xs,
   },
   selectedAddress: {
-    fontSize: 14,
+    ...typography.body,
+    lineHeight: 22,
   },
+  divider: {
+    height: 1,
+    marginVertical: spacing.lg,
+  },
+
+  // ── Save Button ────────────────────────────────
   saveButton: {
-    padding: 16,
-    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 4,
   },
   saveButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
+    ...typography.button,
+    fontSize: 16,
   },
 });

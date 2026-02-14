@@ -1,11 +1,11 @@
-import { StyleSheet, View, Text, TextInput, Button, ScrollView, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TextInput, ScrollView, Alert, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useStores } from '../context/StoresContext';
 import { useLocation } from '@/hooks/useLocation';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-
 
 const GOOGLE_PLACES_API_KEY = 'AIzaSyDY5mGrbAYiPv7a8L18A9rDiODwrpu2oX8';
 
@@ -23,31 +23,33 @@ export default function EditStoreScreen() {
   const { id } = useLocalSearchParams();
   const { stores, updateStore } = useStores();
   const { location } = useLocation();
+  const { colors } = useTheme();
 
   const store = stores.find(s => s.id === id);
 
   if (!store) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text>Store not found</Text>
+        <Stack.Screen options={{ title: 'Edit Store' }} />
+        <View style={styles.notFound}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.notFoundText, { color: colors.textSecondary }]}>Store not found</Text>
+        </View>
       </View>
     );
   }
 
   const [name, setName] = useState(store.name);
   const [address, setAddress] = useState(store.address);
-  const { colors } = useTheme();
   const [website, setWebsite] = useState(store.website || '');
-  const [radius, setRadius] = useState(store.triggerRadius.toString());
-  const [storeLocation, setStoreLocation] = useState<{lat: number, lng: number}>(store.location);
+  const [triggerRadiusStr, setTriggerRadiusStr] = useState((store.triggerRadius || 150).toString());
+  const [storeLocation, setStoreLocation] = useState<{lat: number, lng: number} | undefined>(store.location);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  // Autocomplete states
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [showPredictions, setShowPredictions] = useState(false);
   
-  // Place data from Google (keep existing data as default)
   const [placeData, setPlaceData] = useState<{
     placeId?: string;
     phone?: string;
@@ -62,8 +64,7 @@ export default function EditStoreScreen() {
     photos: store.photos,
   });
 
-  // Autocomplete search
-  const searchPlaces = async (input: string) => {
+  const searchPlacesApi = async (input: string) => {
     setAddress(input);
     
     if (input.length < 3) {
@@ -76,9 +77,7 @@ export default function EditStoreScreen() {
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_PLACES_API_KEY}&components=country:nz`
       );
-
       const data = await response.json();
-
       if (data.predictions) {
         setPredictions(data.predictions);
         setShowPredictions(true);
@@ -88,7 +87,6 @@ export default function EditStoreScreen() {
     }
   };
 
-  // Get place details when user selects from autocomplete
   const selectPlace = async (placeId: string, description: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setAddress(description);
@@ -100,27 +98,13 @@ export default function EditStoreScreen() {
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&key=${GOOGLE_PLACES_API_KEY}&fields=name,formatted_address,geometry,website,formatted_phone_number,rating,opening_hours,photos,place_id`
       );
-
       const data = await response.json();
 
       if (data.result) {
         const result = data.result;
-        
-        // Set location
-        setStoreLocation({
-          lat: result.geometry.location.lat,
-          lng: result.geometry.location.lng,
-        });
-
-        // Update website if available
-        if (result.website) {
-          setWebsite(result.website);
-        }
-
-        // Use formatted address
+        setStoreLocation({ lat: result.geometry.location.lat, lng: result.geometry.location.lng });
+        if (result.website) setWebsite(result.website);
         setAddress(result.formatted_address);
-
-        // Store the place data for later
         setPlaceData({
           placeId: result.place_id,
           phone: result.formatted_phone_number,
@@ -128,7 +112,6 @@ export default function EditStoreScreen() {
           openingHours: result.opening_hours?.weekday_text,
           photos: result.photos?.slice(0, 5).map((p: any) => p.photo_reference),
         });
-
         Alert.alert('Success', 'Location updated!');
       }
     } catch (error) {
@@ -144,46 +127,39 @@ export default function EditStoreScreen() {
       Alert.alert('Error', 'Waiting for GPS location...');
       return;
     }
-
-    setStoreLocation({
-      lat: location.coords.latitude,
-      lng: location.coords.longitude,
-    });
+    setStoreLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
     Alert.alert('Success', 'Using your current location');
   };
 
   const handleSave = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSaving(true);
-    try {
+    
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a store name');
       return;
     }
-
     if (!storeLocation) {
       Alert.alert('Error', 'Please search for address or use current location');
       return;
     }
 
-    // Build update object, excluding undefined values
-    const updates: any = {
-      name: name.trim(),
-      address: address.trim(),
-      location: storeLocation,
-      triggerRadius: parseInt(radius) || 150,
-    };
+    setSaving(true);
+    try {
+      const updates: any = {
+        name: name.trim(),
+        address: (address || '').trim(),
+        location: storeLocation,
+        triggerRadius: parseInt(triggerRadiusStr) || 150,
+      };
 
-    // Only add optional fields if they exist
-    if (website.trim()) updates.website = website.trim();
-    if (placeData.placeId) updates.placeId = placeData.placeId;
-    if (placeData.phone) updates.phone = placeData.phone;
-    if (placeData.rating) updates.rating = placeData.rating;
-    if (placeData.openingHours) updates.openingHours = placeData.openingHours;
-    if (placeData.photos) updates.photos = placeData.photos;
+      if (website.trim()) updates.website = website.trim();
+      if (placeData.placeId) updates.placeId = placeData.placeId;
+      if (placeData.phone) updates.phone = placeData.phone;
+      if (placeData.rating) updates.rating = placeData.rating;
+      if (placeData.openingHours) updates.openingHours = placeData.openingHours;
+      if (placeData.photos) updates.photos = placeData.photos;
 
-    updateStore(store.id, updates);
-
+      await updateStore(store.id, updates);
       Alert.alert('Success', 'Store updated!');
       router.back();
     } finally {
@@ -192,94 +168,131 @@ export default function EditStoreScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]} 
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+    >
       <Stack.Screen options={{ title: 'Edit Store' }} />
 
-      <View style={[styles.form, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.label, { color: colors.text }]}>Store Name *</Text>
-        <TextInput style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]} placeholderTextColor={colors.textLight}
-          placeholder="e.g., Woolworths Motueka"
-          value={name}
-          onChangeText={setName}
-        />
+      {/* Name */}
+      <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Store Name</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+            placeholderTextColor={colors.textMuted}
+            placeholder="e.g., Woolworths Motueka"
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
 
-        <Text style={[styles.label, { color: colors.text }]}>Address *</Text>
-        <TextInput style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]} placeholderTextColor={colors.textLight}
-          placeholder="Start typing an address..."
-          value={address}
-          onChangeText={searchPlaces}
-          autoComplete="off"
-        />
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Address</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+            placeholderTextColor={colors.textMuted}
+            placeholder="Start typing an address..."
+            value={address}
+            onChangeText={searchPlacesApi}
+            autoComplete="off"
+          />
+        </View>
 
         {showPredictions && predictions.length > 0 && (
-          <View style={[styles.predictionsContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.predictions, elevation(2), { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {predictions.map((prediction) => (
               <TouchableOpacity
                 key={prediction.place_id}
-                style={styles.predictionItem}
+                style={[styles.predictionItem, { borderBottomColor: colors.borderLight }]}
                 onPress={() => selectPlace(prediction.place_id, prediction.description)}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.predictionMain, { color: colors.text }]}>
-                  {prediction.structured_formatting.main_text}
-                </Text>
-                <Text style={[styles.predictionSecondary, { color: colors.textLight }]}>
-                  {prediction.structured_formatting.secondary_text}
-                </Text>
+                <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+                <View style={styles.predictionText}>
+                  <Text style={[styles.predictionMain, { color: colors.text }]}>
+                    {prediction.structured_formatting.main_text}
+                  </Text>
+                  <Text style={[styles.predictionSecondary, { color: colors.textMuted }]}>
+                    {prediction.structured_formatting.secondary_text}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        <View style={styles.locationButtons}>
-          <View style={styles.buttonFull}>
-            <Button 
-              title="📍 Use My Current Location" 
-              onPress={useMyLocation}
-              color={colors.success}
-            />
-          </View>
-        </View>
+        <TouchableOpacity
+          style={[styles.locationButton, { backgroundColor: colors.success + '12' }]}
+          onPress={useMyLocation}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="navigate" size={18} color={colors.success} />
+          <Text style={[styles.locationButtonText, { color: colors.success }]}>Use My Current Location</Text>
+        </TouchableOpacity>
 
-        {searching && <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 16 }} />}
+        {searching && <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.lg }} />}
 
         {storeLocation && (
-          <View style={[styles.locationInfo, { backgroundColor: colors.success + '20', borderColor: colors.border }]}>
-            <Text style={[styles.locationLabel, { color: colors.text }]}>✓ Location Set:</Text>
-            <Text style={styles.locationText}>
-              📍 {storeLocation.lat.toFixed(4)}, {storeLocation.lng.toFixed(4)}
+          <View style={[styles.locationSet, { backgroundColor: colors.successLight }]}>
+            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+            <Text style={[styles.locationSetText, { color: colors.success }]}>
+              Location set: {storeLocation.lat.toFixed(4)}, {storeLocation.lng.toFixed(4)}
             </Text>
           </View>
         )}
+      </View>
 
-        <Text style={[styles.label, { color: colors.text }]}>Website (optional)</Text>
-        <TextInput style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]} placeholderTextColor={colors.textLight}
-          placeholder="e.g., woolworths.co.nz"
-          value={website}
-          onChangeText={setWebsite}
-          autoCapitalize="none"
-        />
-
-        <Text style={[styles.label, { color: colors.text }]}>Trigger Radius (meters)</Text>
-        <TextInput style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]} placeholderTextColor={colors.textLight}
-          placeholder="150"
-          value={radius}
-          onChangeText={setRadius}
-          keyboardType="numeric"
-        />
-
-        <View style={styles.buttonContainer}>
-          <Button 
-            title={saving ? "Saving..." : "Save Changes"}
-            disabled={saving} 
-            onPress={handleSave} 
-            color={colors.primary}
+      {/* Additional fields */}
+      <View style={[styles.card, elevation(2), { backgroundColor: colors.surface }]}>
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Website (optional)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+            placeholderTextColor={colors.textMuted}
+            placeholder="e.g., woolworths.co.nz"
+            value={website}
+            onChangeText={setWebsite}
+            autoCapitalize="none"
           />
         </View>
 
-        <View style={styles.buttonContainer}>
-          <Button title="Cancel" onPress={() => router.back()} color={colors.textLight} />
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Trigger Radius (meters)</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, color: colors.text }]}
+            placeholderTextColor={colors.textMuted}
+            placeholder="150"
+            value={triggerRadiusStr}
+            onChangeText={setTriggerRadiusStr}
+            keyboardType="numeric"
+          />
         </View>
       </View>
+
+      {/* Actions */}
+      <TouchableOpacity
+        style={[styles.saveButton, { backgroundColor: colors.primary }, saving && { opacity: 0.6 }]}
+        onPress={handleSave}
+        disabled={saving}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="checkmark" size={20} color={colors.textInverse} />
+        <Text style={[styles.saveButtonText, { color: colors.textInverse }]}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.cancelButton, { borderColor: colors.border }]}
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+      </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -288,63 +301,112 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  form: {
-    padding: 20,
+  scrollContent: {
+    padding: spacing.lg,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 16,
+  notFound: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  notFoundText: {
+    ...typography.body,
+  },
+
+  // ── Cards ──────────────────────────────────────
+  card: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  fieldGroup: {
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
+    ...typography.caption,
+    marginBottom: spacing.sm,
   },
   input: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    fontSize: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md + 2 : spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    ...typography.body,
   },
-  locationButtons: {
-    marginTop: 12,
-  },
-  buttonFull: {
-    width: '100%',
-  },
-  predictionsContainer: {
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderRadius: 8,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    maxHeight: 200,
+
+  // ── Predictions ────────────────────────────────
+  predictions: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+    overflow: 'hidden',
   },
   predictionItem: {
-    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
     borderBottomWidth: 1,
   },
+  predictionText: {
+    flex: 1,
+  },
   predictionMain: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.bodyBold,
   },
   predictionSecondary: {
-    fontSize: 14,
-    marginTop: 2,
+    ...typography.small,
+    marginTop: 1,
   },
-  locationInfo: {
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
-    borderWidth: 2,
+
+  // ── Location Button ────────────────────────────
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
   },
-  locationLabel: {
-    fontSize: 14,
+  locationButtonText: {
+    ...typography.button,
+  },
+  locationSet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.md,
+  },
+  locationSetText: {
+    ...typography.small,
     fontWeight: '600',
-    marginBottom: 4,
   },
-  locationText: {
-    fontSize: 12,
-    fontFamily: 'monospace',
+
+  // ── Buttons ────────────────────────────────────
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 4,
+    marginBottom: spacing.md,
   },
-  buttonContainer: {
-    marginTop: 16,
+  saveButtonText: {
+    ...typography.button,
+    fontSize: 16,
+  },
+  cancelButton: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    ...typography.button,
   },
 });

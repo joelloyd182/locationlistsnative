@@ -1,16 +1,17 @@
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Alert, Modal, Platform } from 'react-native';
 import { useTemplates } from '../context/TemplatesContext';
 import { useMealPlan } from '../context/MealPlanContext';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { detectIngredientEmoji } from '../utils/emoji-detector';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-// Meal type config
 const MEAL_TYPE_CONFIG = {
-  breakfast: { color: '#FFA726', emoji: '🌅' },
-  lunch: { color: '#66BB6A', emoji: '☀️' },
-  dinner: { color: '#5C6BC0', emoji: '🌙' },
-  snack: { color: '#EC407A', emoji: '🍿' },
+  breakfast: { color: '#F59E0B', icon: 'sunny-outline' as const, label: 'Breakfast' },
+  lunch: { color: '#10B981', icon: 'partly-sunny-outline' as const, label: 'Lunch' },
+  dinner: { color: '#6366F1', icon: 'moon-outline' as const, label: 'Dinner' },
+  snack: { color: '#EC4899', icon: 'cafe-outline' as const, label: 'Snack' },
 };
 
 type TemplateLibraryModalProps = {
@@ -25,33 +26,28 @@ export function TemplateLibraryModal({ visible, onClose, onSelectDate, selectedD
   const { addMeal, addIngredient } = useMealPlan();
   const { colors } = useTheme();
 
-  if (!visible) return null;
-
   const handleUseTemplate = async (template: any) => {
-  if (!selectedDate) {
-    Alert.alert('Error', 'Please select a date first');
-    return;
-  }
+    if (!selectedDate) {
+      Alert.alert('Error', 'Please select a date first');
+      return;
+    }
 
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  
-  // Add meal and get the ID back
-  const mealId = await addMeal(selectedDate, template.name, template.mealType);
-  
-  if (!mealId) {
-    Alert.alert('Error', 'Failed to create meal');
-    return;
-  }
-  
-  // Add all ingredients with the correct meal ID
-  for (const ingredient of template.ingredients) {
-    await addIngredient(mealId, ingredient);
-  }
-  
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  Alert.alert('Success!', `Added "${template.name}" to your meal plan`);
-  onClose();
-};
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const mealId = await addMeal(selectedDate, template.name, template.mealType);
+    
+    if (!mealId) {
+      Alert.alert('Error', 'Failed to create meal');
+      return;
+    }
+    
+    for (const ingredient of template.ingredients) {
+      await addIngredient(mealId, ingredient);
+    }
+    
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Success!', `Added "${template.name}" to your meal plan`);
+    onClose();
+  };
 
   const handleDeleteTemplate = (template: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -73,166 +69,217 @@ export function TemplateLibraryModal({ visible, onClose, onSelectDate, selectedD
   };
 
   return (
-    <View style={styles.modal}>
-      <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Meal Templates</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={[styles.closeButton, { color: colors.primary }]}>✕</Text>
-          </TouchableOpacity>
-        </View>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity 
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <Animated.View 
+            entering={FadeIn.duration(200)}
+            style={[styles.content, elevation(4), { backgroundColor: colors.surface }]}
+          >
+            <View style={styles.handle} />
 
-        {templates.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textLight }]}>
-              No templates yet! 📋
-            </Text>
-            <Text style={[styles.emptySubtext, { color: colors.textLight }]}>
-              Save your favorite meals as templates to quickly add them to any day.
-            </Text>
-          </View>
-        ) : (
-          <ScrollView style={styles.templatesList}>
-            {templates.map(template => {
-              const mealConfig = MEAL_TYPE_CONFIG[template.mealType];
-              return (
-                <View 
-                  key={template.id}
-                  style={[styles.templateCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                >
-                  <View style={styles.templateHeader}>
-                    <View style={styles.templateTitleRow}>
-                      <Text style={styles.templateEmoji}>{mealConfig.emoji}</Text>
-                      <View style={styles.templateInfo}>
-                        <Text style={[styles.templateName, { color: colors.text }]}>
-                          {template.name}
-                        </Text>
-                        <Text style={[styles.templateIngredients, { color: colors.textLight }]}>
-                          {template.ingredients.slice(0, 3).map(detectIngredientEmoji).join(' • ')}
-                          {template.ingredients.length > 3 && ` +${template.ingredients.length - 3}`}
-                        </Text>
+            <View style={styles.header}>
+              <View>
+                <Text style={[styles.title, { color: colors.text }]}>Meal Templates</Text>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+                  {templates.length} template{templates.length !== 1 ? 's' : ''} saved
+                </Text>
+              </View>
+              <TouchableOpacity 
+                style={[styles.closeIcon, { backgroundColor: colors.surfaceAlt }]}
+                onPress={onClose}
+              >
+                <Ionicons name="close" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {templates.length === 0 ? (
+              <View style={styles.emptyState}>
+                <View style={[styles.emptyIcon, { backgroundColor: colors.primary + '12' }]}>
+                  <Ionicons name="bookmark-outline" size={32} color={colors.primary} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No templates yet</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                  Save your favorite meals as templates from the meal detail screen
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+                {templates.map(template => {
+                  const mealConfig = MEAL_TYPE_CONFIG[template.mealType] || MEAL_TYPE_CONFIG.dinner;
+                  return (
+                    <View 
+                      key={template.id}
+                      style={[styles.templateCard, elevation(1), { backgroundColor: colors.surface }]}
+                    >
+                      <View style={styles.templateBody}>
+                        <View style={[styles.templateIcon, { backgroundColor: mealConfig.color + '15' }]}>
+                          <Ionicons name={mealConfig.icon} size={20} color={mealConfig.color} />
+                        </View>
+                        <View style={styles.templateInfo}>
+                          <Text style={[styles.templateName, { color: colors.text }]} numberOfLines={1}>
+                            {template.name}
+                          </Text>
+                          <Text style={[styles.templateIngredients, { color: colors.textMuted }]} numberOfLines={1}>
+                            {template.ingredients.slice(0, 3).map(detectIngredientEmoji).join(' · ')}
+                            {template.ingredients.length > 3 ? ` +${template.ingredients.length - 3}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.templateActions}>
+                        {selectedDate && (
+                          <TouchableOpacity
+                            style={[styles.useButton, { backgroundColor: colors.primary }]}
+                            onPress={() => handleUseTemplate(template)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="add-circle-outline" size={16} color={colors.textInverse} />
+                            <Text style={[styles.useButtonText, { color: colors.textInverse }]}>Use</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={[styles.deleteButton, { backgroundColor: colors.errorLight }]}
+                          onPress={() => handleDeleteTemplate(template)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={colors.error} />
+                        </TouchableOpacity>
                       </View>
                     </View>
-                  </View>
-
-                  <View style={styles.templateActions}>
-                    {selectedDate && (
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.useButton, { backgroundColor: colors.success }]}
-                        onPress={() => handleUseTemplate(template)}
-                      >
-                        <Text style={styles.actionButtonText}>Use Template</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton, { backgroundColor: colors.error }]}
-                      onPress={() => handleDeleteTemplate(template)}
-                    >
-                      <Text style={styles.actionButtonText}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
-      </View>
-    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  overlay: {
+    flex: 1,
     justifyContent: 'flex-end',
   },
-  modalContent: {
+  content: {
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
     maxHeight: '80%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
+    ...typography.title,
   },
-  closeButton: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  subtitle: {
+    ...typography.small,
+    marginTop: 2,
   },
-  emptyState: {
-    padding: 40,
+  closeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  emptyText: {
-    fontSize: 16,
-    marginBottom: 8,
+
+  // ── Empty State ────────────────────────────────
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
   },
-  emptySubtext: {
-    fontSize: 14,
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    ...typography.subtitle,
+    marginBottom: spacing.sm,
+  },
+  emptySubtitle: {
+    ...typography.body,
     textAlign: 'center',
+    lineHeight: 22,
   },
-  templatesList: {
-    maxHeight: 500,
+
+  // ── Template Cards ─────────────────────────────
+  list: {
+    maxHeight: 400,
   },
   templateCard: {
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 12,
-    marginBottom: 12,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
   },
-  templateHeader: {
-    marginBottom: 10,
-  },
-  templateTitleRow: {
+  templateBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
-  templateEmoji: {
-    fontSize: 32,
+  templateIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   templateInfo: {
     flex: 1,
   },
   templateName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...typography.bodyBold,
   },
   templateIngredients: {
-    fontSize: 13,
+    ...typography.small,
+    marginTop: 2,
   },
   templateActions: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
+    gap: spacing.sm,
   },
   useButton: {
-    flex: 2,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.md,
+  },
+  useButtonText: {
+    ...typography.button,
+    fontSize: 14,
   },
   deleteButton: {
-    flex: 1,
-  },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '600',
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

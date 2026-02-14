@@ -1,9 +1,9 @@
-// MoveMealModal.tsx - Create this new component
-
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useTheme } from '../context/ThemeContext';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 type MoveMealModalProps = {
   visible: boolean;
@@ -25,68 +25,89 @@ export function MoveMealModal({
   const { colors } = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={[styles.modal, { backgroundColor: colors.card }]}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            Move "{mealName}"
-          </Text>
-          <Text style={[styles.subtitle, { color: colors.textLight }]}>
-            Select which day to move this meal to:
-          </Text>
-
-          <View style={styles.daysList}>
-            {weekDates.map((date, index) => {
-              const dateString = date.toISOString().split('T')[0];
-              const isCurrentDay = dateString === currentDate;
-              const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-              const dayNumber = date.getDate();
-              const isToday = date.toDateString() === new Date().toDateString();
-
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.dayButton,
-                    { backgroundColor: colors.background, borderColor: colors.border },
-                    isCurrentDay && { opacity: 0.5 },
-                    isToday && { borderColor: colors.primary, borderWidth: 2 }
-                  ]}
-                  onPress={() => {
-                    if (!isCurrentDay) {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      onSelectDay(dateString);
-                    }
-                  }}
-                  disabled={isCurrentDay}
-                >
-                  <Text style={[styles.dayName, { color: colors.text }]}>
-                    {dayName}
-                  </Text>
-                  <Text style={[styles.dayNumber, { color: colors.text }]}>
-                    {dayNumber}
-                  </Text>
-                  {isCurrentDay && (
-                    <Text style={[styles.currentLabel, { color: colors.textLight }]}>
-                      (current)
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.cancelButton, { backgroundColor: colors.textLight }]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onClose();
-            }}
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity 
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <Animated.View 
+            entering={FadeIn.duration(200)}
+            style={[styles.content, elevation(4), { backgroundColor: colors.surface }]}
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            <View style={styles.handle} />
+
+            <Text style={[styles.title, { color: colors.text }]}>Move Meal</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Move "{mealName}" to another day
+            </Text>
+
+            <View style={styles.daysGrid}>
+              {weekDates.map((date, index) => {
+                const dateString = date.toISOString().split('T')[0];
+                const isCurrentDay = dateString === currentDate;
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                const dayNumber = date.getDate();
+                const isToday = date.toDateString() === new Date().toDateString();
+
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.dayCell,
+                      { backgroundColor: colors.surfaceAlt, borderColor: 'transparent' },
+                      isToday && { borderColor: colors.primary, borderWidth: 2 },
+                      isCurrentDay && { backgroundColor: colors.primary + '10' },
+                    ]}
+                    onPress={() => {
+                      if (!isCurrentDay) {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        onSelectDay(dateString);
+                      }
+                    }}
+                    disabled={isCurrentDay}
+                    activeOpacity={isCurrentDay ? 1 : 0.7}
+                  >
+                    <Text style={[
+                      styles.dayName, 
+                      { color: isCurrentDay ? colors.textMuted : isToday ? colors.primary : colors.textSecondary }
+                    ]}>
+                      {dayName}
+                    </Text>
+                    <Text style={[
+                      styles.dayNumber, 
+                      { color: isCurrentDay ? colors.textMuted : isToday ? colors.primary : colors.text }
+                    ]}>
+                      {dayNumber}
+                    </Text>
+                    {isCurrentDay && (
+                      <View style={[styles.currentBadge, { backgroundColor: colors.textMuted + '20' }]}>
+                        <Text style={[styles.currentBadgeText, { color: colors.textMuted }]}>Current</Text>
+                      </View>
+                    )}
+                    {isToday && !isCurrentDay && (
+                      <View style={[styles.currentBadge, { backgroundColor: colors.primary + '15' }]}>
+                        <Text style={[styles.currentBadgeText, { color: colors.primary }]}>Today</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.cancelButton, { borderColor: colors.border }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onClose();
+              }}
+            >
+              <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -94,63 +115,78 @@ export function MoveMealModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
-  modal: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 16,
-    padding: 20,
+  content: {
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
+    ...typography.title,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    marginBottom: 20,
+    ...typography.body,
+    marginBottom: spacing.xl,
   },
-  daysList: {
+
+  // ── Days Grid ──────────────────────────────────
+  daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+    justifyContent: 'center',
   },
-  dayButton: {
+  dayCell: {
     width: '30%',
     aspectRatio: 1,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
+    padding: spacing.sm,
+    borderWidth: 1,
   },
   dayName: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...typography.small,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   dayNumber: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    marginTop: 4,
+    marginTop: 2,
   },
-  currentLabel: {
-    fontSize: 10,
-    marginTop: 4,
+  currentBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 1,
+    borderRadius: radius.full,
+    marginTop: spacing.xs,
   },
+  currentBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+
+  // ── Cancel ─────────────────────────────────────
   cancelButton: {
-    padding: 14,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
   },
   cancelButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
   },
 });

@@ -1,8 +1,12 @@
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, RefreshControl, Platform } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useStores } from '../../context/StoresContext';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import StoreLogo from '../../components/StoreLogo';
 
 export default function StoresScreen() {
   const router = useRouter();
@@ -12,26 +16,23 @@ export default function StoresScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Firestore already syncs automatically via onSnapshot
-    // Just wait a bit to show the refresh animation
     await new Promise(resolve => setTimeout(resolve, 800));
     setRefreshing(false);
   };
 
-    return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <Text style={[styles.title, { color: colors.text }]}>All Stores</Text>
-        <TouchableOpacity 
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/add-store')}
-        >
-          <Text style={styles.addButtonText}>+ Add Store</Text>
-        </TouchableOpacity>
-      </View>
+  const sortedStores = [...stores].sort((a, b) => {
+    const aPending = a.items.filter(i => !i.checked).length;
+    const bPending = b.items.filter(i => !i.checked).length;
+    // Stores with pending items first, then alphabetical
+    if (aPending > 0 && bPending === 0) return -1;
+    if (aPending === 0 && bPending > 0) return 1;
+    return a.name.localeCompare(b.name);
+  });
 
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={stores}
+        data={sortedStores}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -41,66 +42,170 @@ export default function StoresScreen() {
           />
         }
         keyExtractor={store => store.id}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        renderItem={({ item: store }) => {
+        contentContainerStyle={[
+          styles.listContent,
+          stores.length === 0 && styles.emptyListContent,
+        ]}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <View>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Your Stores</Text>
+              <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+                {stores.length} store{stores.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push('/add-store');
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={20} color={colors.textInverse} />
+              <Text style={[styles.addButtonText, { color: colors.textInverse }]}>Add Store</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        renderItem={({ item: store, index }) => {
           const totalItems = store.items.length;
           const uncheckedItems = store.items.filter(i => !i.checked).length;
+          const checkedItems = totalItems - uncheckedItems;
           const allDone = totalItems > 0 && uncheckedItems === 0;
+          const progress = totalItems > 0 ? checkedItems / totalItems : 0;
 
           return (
-            <TouchableOpacity
-              style={[
-                styles.storeCard, 
-                { backgroundColor: colors.card, borderColor: colors.border },
-                allDone && { backgroundColor: colors.success + '20', borderColor: colors.success }
-              ]}
-              onPress={() => router.push(`/store-detail?id=${store.id}`)}
-            >
-              {/* Store Icon & Header */}
-              <View style={styles.storeHeader}>
-                <View style={styles.storeHeaderLeft}>
-                  <Text style={styles.storeIcon}>
-                    {store.isOnline ? '🌐' : '🏪'}
-                  </Text>
-                  <Text style={[styles.storeName, { color: colors.text }]}>{store.name}</Text>
+            <Animated.View entering={FadeInDown.delay(index * 60).duration(350)}>
+              <TouchableOpacity
+                style={[styles.storeCard, elevation(2), { backgroundColor: colors.surface }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(`/store-detail?id=${store.id}`);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.storeCardBody}>
+                  {/* Logo / Icon */}
+                  {allDone ? (
+                    <View style={[
+                      styles.storeIconContainer, 
+                      { backgroundColor: colors.successLight }
+                    ]}>
+                      <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                    </View>
+                  ) : (
+                    <StoreLogo
+                      website={store.website}
+                      storeName={store.name}
+                      isOnline={store.isOnline}
+                      size={44}
+                      backgroundColor={colors.primary + '12'}
+                      iconColor={colors.primary}
+                    />
+                  )}
+
+                  {/* Info */}
+                  <View style={styles.storeInfo}>
+                    <View style={styles.storeNameRow}>
+                      <Text style={[styles.storeName, { color: colors.text }]} numberOfLines={1}>
+                        {store.name}
+                      </Text>
+                      {allDone && (
+                        <View style={[styles.doneBadge, { backgroundColor: colors.success }]}>
+                          <Text style={[styles.doneBadgeText, { color: colors.textInverse }]}>Done</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text style={[styles.storeAddress, { color: colors.textMuted }]} numberOfLines={1}>
+                      {store.isOnline 
+                        ? (store.website || 'Online Store')
+                        : (store.address || 'No address set')
+                      }
+                    </Text>
+
+                    {/* Stats row */}
+                    <View style={styles.statsRow}>
+                      <View style={styles.stat}>
+                        <Ionicons name="cube-outline" size={13} color={colors.textMuted} />
+                        <Text style={[styles.statText, { color: colors.textSecondary }]}>
+                          {totalItems} item{totalItems !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                      {uncheckedItems > 0 && (
+                        <View style={styles.stat}>
+                          <Ionicons name="ellipse" size={6} color={colors.error} />
+                          <Text style={[styles.statTextPending, { color: colors.error }]}>
+                            {uncheckedItems} pending
+                          </Text>
+                        </View>
+                      )}
+                      {(() => {
+                        const priceTotal = store.items
+                          .filter(i => i.price != null && i.price > 0)
+                          .reduce((sum, i) => sum + (i.price || 0), 0);
+                        if (priceTotal <= 0) return null;
+                        return (
+                          <View style={styles.stat}>
+                            <Ionicons name="cash-outline" size={13} color={colors.success} />
+                            <Text style={[styles.statText, { color: colors.success, fontWeight: '600' }]}>
+                              ${priceTotal.toFixed(2)}
+                            </Text>
+                          </View>
+                        );
+                      })()}
+                      {!store.isOnline && store.triggerRadius && (
+                        <View style={styles.stat}>
+                          <Ionicons name="locate-outline" size={13} color={colors.textMuted} />
+                          <Text style={[styles.statText, { color: colors.textSecondary }]}>
+                            {store.triggerRadius}m
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Progress bar */}
+                    {totalItems > 0 && (
+                      <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
+                        <View 
+                          style={[
+                            styles.progressFill, 
+                            { 
+                              backgroundColor: allDone ? colors.success : colors.primary,
+                              width: `${progress * 100}%`,
+                            }
+                          ]} 
+                        />
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Chevron */}
+                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                 </View>
-                {allDone && <Text style={[styles.donebadge, { backgroundColor: colors.success }]}>✓ Done</Text>}
-              </View>
-              
-              {/* Address or Website */}
-              <Text style={[styles.storeAddress, { color: colors.textLight }]}>
-                {store.isOnline 
-                  ? (store.website || 'Online Store')
-                  : (store.address || 'No address')
-                }
-              </Text>
-              
-              {/* Stats */}
-              <View style={styles.storeStats}>
-                <Text style={[styles.statText, { color: colors.textLight }]}>
-                  📦 {totalItems} items
-                </Text>
-                {uncheckedItems > 0 && (
-                  <Text style={[styles.statTextPending, { color: colors.error }]}>
-                    • {uncheckedItems} pending
-                  </Text>
-                )}
-                {!store.isOnline && store.triggerRadius && (
-                  <Text style={[styles.statText, { color: colors.textLight }]}>
-                    • 📍 {store.triggerRadius}m radius
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </Animated.View>
           );
         }}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={[styles.emptyText, { color: colors.textLight }]}>No stores yet!</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textLight }]}>Tap "Add Store" to get started</Text>
+          <View style={[styles.emptyState, elevation(1), { backgroundColor: colors.surface }]}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.primary + '12' }]}>
+              <Ionicons name="storefront-outline" size={32} color={colors.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No stores yet</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Add a store to start building your shopping lists
+            </Text>
+            <TouchableOpacity
+              style={[styles.emptyAddButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/add-store')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={18} color={colors.textInverse} />
+              <Text style={[styles.emptyAddButtonText, { color: colors.textInverse }]}>Add Your First Store</Text>
+            </TouchableOpacity>
           </View>
         }
-        contentContainerStyle={stores.length === 0 ? styles.emptyList : undefined}
       />
     </View>
   );
@@ -110,93 +215,153 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  listContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 100,
+  },
+  emptyListContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+
+  // ── List Header ────────────────────────────────
+  listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 2,
+    paddingVertical: spacing.lg,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  headerTitle: {
+    ...typography.title,
+  },
+  headerSubtitle: {
+    ...typography.small,
+    marginTop: 2,
   },
   addButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
   },
   addButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    ...typography.button,
     fontSize: 14,
   },
+
+  // ── Store Card ─────────────────────────────────
   storeCard: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
   },
-  storeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  storeHeaderLeft: {
+  storeCardBody: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.md,
+  },
+  storeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeInfo: {
     flex: 1,
   },
-  storeIcon: {
-    fontSize: 28,
-    marginRight: 10,
+  storeNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   storeName: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...typography.bodyBold,
     flex: 1,
   },
-  donebadge: {
-    color: 'white',
-    paddingHorizontal: 8,
+  doneBadge: {
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: 2,
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: '600',
+    borderRadius: radius.full,
+  },
+  doneBadgeText: {
+    ...typography.small,
+    fontSize: 10,
+    fontWeight: '700',
   },
   storeAddress: {
-    fontSize: 14,
-    marginBottom: 8,
+    ...typography.small,
+    marginTop: 2,
   },
-  storeStats: {
+
+  // ── Stats ──────────────────────────────────────
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  stat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   statText: {
-    fontSize: 12,
+    ...typography.small,
   },
   statTextPending: {
-    fontSize: 12,
+    ...typography.small,
     fontWeight: '600',
   },
-  emptyContainer: {
+
+  // ── Progress Bar ───────────────────────────────
+  progressTrack: {
+    height: 3,
+    borderRadius: 1.5,
+    marginTop: spacing.sm + 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+
+  // ── Empty State ────────────────────────────────
+  emptyState: {
+    borderRadius: radius.xl,
+    padding: spacing.xxxl,
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    marginBottom: spacing.lg,
   },
-  emptyList: {
-    flex: 1,
-    justifyContent: 'center',
+  emptyTitle: {
+    ...typography.subtitle,
+    marginBottom: spacing.sm,
   },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 8,
+  emptySubtitle: {
+    ...typography.body,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.xl,
   },
-  emptySubtext: {
-    fontSize: 14,
+  emptyAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.full,
+  },
+  emptyAddButtonText: {
+    ...typography.button,
   },
 });

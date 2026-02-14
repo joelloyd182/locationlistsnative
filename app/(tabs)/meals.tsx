@@ -1,21 +1,23 @@
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, TextInput, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, TextInput, RefreshControl, Modal, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useMealPlan, Meal } from '../../context/MealPlanContext';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { detectIngredientEmoji } from '../../utils/emoji-detector';
 import { TemplateLibraryModal } from '../../components/TemplateLibraryModal';
 import { WeeklyGroceryModal } from '../../components/WeeklyGroceryModal';
 import { useWeekStart } from '../../context/WeekStartContext';
 import { MoveMealModal } from '../../components/MoveMealModal';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-// Meal type config
+// Meal type config with Ionicons
 const MEAL_TYPE_CONFIG = {
-  breakfast: { color: '#FFA726', label: 'Breakfast', emoji: '🌅' },
-  lunch: { color: '#66BB6A', label: 'Lunch', emoji: '☀️' },
-  dinner: { color: '#5C6BC0', label: 'Dinner', emoji: '🌙' },
-  snack: { color: '#EC407A', label: 'Snack', emoji: '🍿' },
+  breakfast: { color: '#F59E0B', label: 'Breakfast', icon: 'sunny-outline' as const },
+  lunch: { color: '#10B981', label: 'Lunch', icon: 'partly-sunny-outline' as const },
+  dinner: { color: '#6366F1', label: 'Dinner', icon: 'moon-outline' as const },
+  snack: { color: '#EC4899', label: 'Snack', icon: 'cafe-outline' as const },
 };
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -27,12 +29,9 @@ export default function MealsScreen() {
   const { getWeekStart } = useWeekStart();
   
   const [refreshing, setRefreshing] = useState(false);
-  
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [templateTargetDate, setTemplateTargetDate] = useState<string>('');
   const [showWeeklyGrocery, setShowWeeklyGrocery] = useState(false);
-  
-  // Week navigation
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getWeekStart());
 
   // Add meal modal
@@ -49,10 +48,8 @@ export default function MealsScreen() {
     setRefreshing(true);
     await new Promise(resolve => setTimeout(resolve, 500));
     setRefreshing(false);
-	
   };
 
-  // Generate week dates
   const getWeekDates = () => {
     const dates = [];
     for (let i = 0; i < 7; i++) {
@@ -113,7 +110,6 @@ export default function MealsScreen() {
 
   const handleAddMeal = async () => {
     if (!newMealName.trim()) return;
-    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await addMeal(selectedDate, newMealName.trim(), selectedMealType);
     setShowAddModal(false);
@@ -151,57 +147,65 @@ export default function MealsScreen() {
     const monthEnd = end.toLocaleDateString('en-US', { month: 'short' });
     
     if (monthStart === monthEnd) {
-      return `${monthStart} ${start.getDate()}-${end.getDate()}`;
+      return `${monthStart} ${start.getDate()}–${end.getDate()}`;
     }
-    return `${monthStart} ${start.getDate()} - ${monthEnd} ${end.getDate()}`;
-
+    return `${monthStart} ${start.getDate()} – ${monthEnd} ${end.getDate()}`;
   };
   
   const handleMoveMeal = async (dateString: string) => {
-  if (!mealToMove) return;
-  
-  try {
-    await moveMeal(mealToMove.id, dateString);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setShowMoveModal(false);
-    setMealToMove(null);
-  } catch (error) {
-    Alert.alert('Error', 'Failed to move meal');
-  }
-};
+    if (!mealToMove) return;
+    try {
+      await moveMeal(mealToMove.id, dateString);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowMoveModal(false);
+      setMealToMove(null);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to move meal');
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Week Navigation Header */}
-      <View style={[styles.weekHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton}>
-          <Text style={[styles.navButtonText, { color: colors.primary }]}>◀</Text>
+      <View style={[styles.weekHeader, elevation(1), { backgroundColor: colors.surface }]}>
+        <TouchableOpacity onPress={() => navigateWeek('prev')} style={styles.navButton} activeOpacity={0.6}>
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         
-        <TouchableOpacity onPress={goToToday} style={styles.weekTitleContainer}>
+        <TouchableOpacity onPress={goToToday} style={styles.weekTitleContainer} activeOpacity={0.7}>
           <Text style={[styles.weekTitle, { color: colors.text }]}>{formatWeekRange()}</Text>
-          <Text style={[styles.weekSubtitle, { color: colors.textLight }]}>Tap for today</Text>
+          <Text style={[styles.weekSubtitle, { color: colors.textMuted }]}>Tap for today</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton}>
-          <Text style={[styles.navButtonText, { color: colors.primary }]}>▶</Text>
+        <TouchableOpacity onPress={() => navigateWeek('next')} style={styles.navButton} activeOpacity={0.6}>
+          <Ionicons name="chevron-forward" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
       {/* Weekly Grocery Button */}
       <TouchableOpacity
-        style={[styles.groceryButton, { backgroundColor: colors.success }]}
+        style={[styles.groceryButton, elevation(2), { backgroundColor: colors.surface }]}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           setShowWeeklyGrocery(true);
         }}
+        activeOpacity={0.7}
       >
-        <Text style={styles.groceryButtonText}>🛒 Weekly Grocery List</Text>
+        <View style={[styles.groceryIconContainer, { backgroundColor: colors.success + '15' }]}>
+          <Ionicons name="cart-outline" size={20} color={colors.success} />
+        </View>
+        <View style={styles.groceryTextContainer}>
+          <Text style={[styles.groceryTitle, { color: colors.text }]}>Weekly Grocery List</Text>
+          <Text style={[styles.grocerySubtitle, { color: colors.textMuted }]}>
+            Send all ingredients to stores
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
       <ScrollView 
         style={styles.scrollView}
-		contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -211,45 +215,61 @@ export default function MealsScreen() {
           />
         }
       >
-        {/* Calendar Grid */}
         {weekDates.map((date, index) => {
           const dayMeals = getMealsForDate(date);
           const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
           const dayNumber = date.getDate();
+          const monthName = date.toLocaleDateString('en-US', { month: 'short' });
           const today = isToday(date);
 
           return (
-            <View 
-              key={index} 
+            <Animated.View 
+              key={index}
+              entering={FadeInDown.delay(index * 50).duration(350)}
               style={[
                 styles.dayCard, 
-                { backgroundColor: colors.card, borderColor: colors.border },
-                today && { borderColor: colors.primary, borderWidth: 3 }
+                elevation(today ? 3 : 1),
+                { backgroundColor: colors.surface },
+                today && { borderWidth: 2, borderColor: colors.primary },
               ]}
             >
               {/* Day Header */}
-              <View style={styles.dayHeader}>
-                <View>
-                  <Text style={[styles.dayName, { color: today ? colors.primary : colors.text }]}>
+              <View style={[styles.dayHeader, { borderBottomColor: colors.borderLight }]}>
+                <View style={styles.dayDateContainer}>
+                  <Text style={[
+                    styles.dayName, 
+                    { color: today ? colors.primary : colors.textSecondary }
+                  ]}>
                     {dayName}
                   </Text>
-                  <Text style={[styles.dayNumber, { color: today ? colors.primary : colors.textLight }]}>
-                    {dayNumber}
-                  </Text>
+                  <View style={styles.dayNumberRow}>
+                    <Text style={[
+                      styles.dayNumber, 
+                      { color: today ? colors.primary : colors.text }
+                    ]}>
+                      {dayNumber}
+                    </Text>
+                    {today && (
+                      <View style={[styles.todayBadge, { backgroundColor: colors.primary }]}>
+                        <Text style={[styles.todayBadgeText, { color: colors.textInverse }]}>Today</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 
                 <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: colors.primary }]}
+                  style={[styles.addMealButton, { backgroundColor: colors.primary + '12' }]}
                   onPress={() => openAddMealModal(date)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.addButtonText}>+ Add</Text>
+                  <Ionicons name="add" size={18} color={colors.primary} />
                 </TouchableOpacity>
               </View>
 
-              {/* Meals List */}
+              {/* Meals */}
               {dayMeals.length === 0 ? (
                 <View style={styles.emptyDay}>
-                  <Text style={[styles.emptyDayText, { color: colors.textLight }]}>
+                  <Text style={[styles.emptyDayText, { color: colors.textMuted }]}>
                     No meals planned
                   </Text>
                 </View>
@@ -264,125 +284,162 @@ export default function MealsScreen() {
                       const mealConfig = MEAL_TYPE_CONFIG[meal.mealType || 'dinner'];
                       return (
                         <TouchableOpacity
-  key={meal.id}
-  style={[styles.mealItem, { borderLeftColor: mealConfig.color }]}
-  onPress={() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(`/meal-detail?id=${meal.id}`);
-  }}
-  onLongPress={() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      meal.name,
-      'What would you like to do?',
-      [
-        {
-          text: '📅 Move to Another Day',
-          onPress: () => {
-            setMealToMove(meal);
-            setShowMoveModal(true);
-          }
-        },
-        {
-          text: '🗑️ Delete Meal',
-          style: 'destructive',
-          onPress: () => handleDeleteMeal(meal.id, meal.name)
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  }}
->
-  <View style={styles.mealContent}>
-  <Text style={styles.mealEmoji}>{mealConfig.emoji}</Text>
-  <View style={styles.mealInfo}>
-    <Text style={[styles.mealName, { color: colors.text }]}>
-      {meal.name}
-    </Text>
-    {meal.ingredients && meal.ingredients.length > 0 && (
-      <View style={styles.ingredientsPreview}>
-        <Text style={[styles.ingredientsList, { color: colors.textLight }]}>
-          {meal.ingredients.slice(0, 3).map(detectIngredientEmoji).join(' • ')}
-        </Text>
-        {meal.ingredients.length > 3 && (
-          <Text style={[styles.ingredientsMore, { color: colors.primary }]}>
-            +{meal.ingredients.length - 3} more
-          </Text>
-        )}
-      </View>
-    )}
-  </View>
-</View>
-</TouchableOpacity>
+                          key={meal.id}
+                          style={[
+                            styles.mealItem,
+                            { borderLeftColor: mealConfig.color, backgroundColor: mealConfig.color + '08' }
+                          ]}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push(`/meal-detail?id=${meal.id}`);
+                          }}
+                          onLongPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            Alert.alert(
+                              meal.name,
+                              'What would you like to do?',
+                              [
+                                {
+                                  text: 'Move to Another Day',
+                                  onPress: () => {
+                                    setMealToMove(meal);
+                                    setShowMoveModal(true);
+                                  }
+                                },
+                                {
+                                  text: 'Delete Meal',
+                                  style: 'destructive',
+                                  onPress: () => handleDeleteMeal(meal.id, meal.name)
+                                },
+                                { text: 'Cancel', style: 'cancel' }
+                              ]
+                            );
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.mealContent}>
+                            <Ionicons 
+                              name={mealConfig.icon} 
+                              size={20} 
+                              color={mealConfig.color} 
+                            />
+                            <View style={styles.mealInfo}>
+                              <Text style={[styles.mealName, { color: colors.text }]}>
+                                {meal.name}
+                              </Text>
+                              {meal.ingredients && meal.ingredients.length > 0 && (
+                                <Text style={[styles.ingredientsList, { color: colors.textMuted }]} numberOfLines={1}>
+                                  {meal.ingredients.slice(0, 3).map(detectIngredientEmoji).join(' · ')}
+                                  {meal.ingredients.length > 3 ? ` +${meal.ingredients.length - 3}` : ''}
+                                </Text>
+                              )}
+                            </View>
+                            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                          </View>
+                        </TouchableOpacity>
                       );
                     })}
                 </View>
               )}
-            </View>
+            </Animated.View>
           );
         })}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Add Meal Modal */}
-      {showAddModal && (
-        <View style={styles.modal}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              Add Meal - {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </Text>
+      {/* ── Add Meal Modal ───────────────────── */}
+      <Modal
+        visible={showAddModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <TouchableOpacity 
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          activeOpacity={1}
+          onPress={() => setShowAddModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <Animated.View 
+              entering={FadeIn.duration(200)}
+              style={[styles.modalContent, elevation(4), { backgroundColor: colors.surface }]}
+            >
+              <View style={styles.modalHandle} />
+              
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                Add Meal — {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </Text>
 
-            <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text }]}
-              placeholder="Meal name..."
-              placeholderTextColor={colors.textLight}
-              value={newMealName}
-              onChangeText={setNewMealName}
-              autoFocus
-            />
+              <TextInput
+                style={[styles.modalInput, { 
+                  backgroundColor: colors.surfaceAlt, 
+                  borderColor: colors.borderLight,
+                  color: colors.text,
+                }]}
+                placeholder="Meal name..."
+                placeholderTextColor={colors.textMuted}
+                value={newMealName}
+                onChangeText={setNewMealName}
+                autoFocus
+              />
 
-            <Text style={[styles.modalLabel, { color: colors.text }]}>Meal Type</Text>
-            <View style={styles.mealTypeSelector}>
-              {Object.entries(MEAL_TYPE_CONFIG).map(([key, config]) => (
+              <Text style={[styles.modalLabel, { color: colors.textSecondary }]}>Meal Type</Text>
+              <View style={styles.mealTypeGrid}>
+                {Object.entries(MEAL_TYPE_CONFIG).map(([key, config]) => {
+                  const isSelected = selectedMealType === key;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        styles.mealTypeButton,
+                        { borderColor: config.color + '40' },
+                        isSelected && { backgroundColor: config.color, borderColor: config.color }
+                      ]}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedMealType(key as MealType);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons 
+                        name={config.icon} 
+                        size={18} 
+                        color={isSelected ? '#FFFFFF' : config.color} 
+                      />
+                      <Text style={[
+                        styles.mealTypeLabel,
+                        { color: isSelected ? '#FFFFFF' : colors.text }
+                      ]}>
+                        {config.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.modalActions}>
                 <TouchableOpacity
-                  key={key}
-                  style={[
-                    styles.mealTypeButton,
-                    { borderColor: config.color },
-                    selectedMealType === key && { backgroundColor: config.color }
-                  ]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSelectedMealType(key as MealType);
-                  }}
+                  style={[styles.modalCancelButton, { borderColor: colors.border }]}
+                  onPress={() => setShowAddModal(false)}
                 >
-                  <Text style={styles.mealTypeEmoji}>{config.emoji}</Text>
-                  <Text style={[
-                    styles.mealTypeLabel,
-                    { color: selectedMealType === key ? 'white' : colors.text }
-                  ]}>
-                    {config.label}
-                  </Text>
+                  <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.success }]}
-                onPress={handleAddMeal}
-              >
-                <Text style={styles.modalButtonText}>Add Meal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: colors.textLight }]}
-                onPress={() => setShowAddModal(false)}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
+                <TouchableOpacity
+                  style={[
+                    styles.modalSaveButton, 
+                    { backgroundColor: newMealName.trim() ? colors.primary : colors.border }
+                  ]}
+                  onPress={handleAddMeal}
+                  disabled={!newMealName.trim()}
+                >
+                  <Text style={[styles.modalSaveText, { color: colors.textInverse }]}>Add Meal</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Template Library Modal */}
       <TemplateLibraryModal
@@ -397,8 +454,8 @@ export default function MealsScreen() {
         onClose={() => setShowWeeklyGrocery(false)}
         weekStart={currentWeekStart}
       />
-	  
-	  {mealToMove && (
+      
+      {mealToMove && (
         <MoveMealModal
           visible={showMoveModal}
           mealName={mealToMove.name}
@@ -419,198 +476,231 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  
+  // ── Week Header ────────────────────────────────
   weekHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   navButton: {
-    padding: 8,
-  },
-  navButtonText: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   weekTitleContainer: {
     flex: 1,
     alignItems: 'center',
   },
   weekTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...typography.subtitle,
   },
   weekSubtitle: {
-    fontSize: 11,
-    marginTop: 2,
+    ...typography.small,
+    marginTop: 1,
   },
+
+  // ── Grocery Button ─────────────────────────────
   groceryButton: {
-    margin: 12,
-    marginTop: 0,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
     flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  groceryIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  groceryButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
+  groceryTextContainer: {
+    flex: 1,
   },
+  groceryTitle: {
+    ...typography.bodyBold,
+  },
+  grocerySubtitle: {
+    ...typography.small,
+    marginTop: 1,
+  },
+
+  // ── Scroll ─────────────────────────────────────
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+  },
+
+  // ── Day Card ───────────────────────────────────
   dayCard: {
-    margin: 12,
-    marginBottom: 0,
-    borderRadius: 12,
-    borderWidth: 2,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
     overflow: 'hidden',
   },
   dayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    paddingBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
+  dayDateContainer: {
+    flex: 1,
   },
   dayName: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...typography.small,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dayNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   dayNumber: {
+    ...typography.title,
     fontSize: 20,
+  },
+  todayBadge: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+  },
+  todayBadgeText: {
+    ...typography.small,
+    fontSize: 10,
     fontWeight: '700',
   },
-  addButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  addMealButton: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addButtonText: {
-    color: 'white',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+
+  // ── Empty Day ──────────────────────────────────
   emptyDay: {
-    padding: 16,
-    paddingTop: 8,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
   },
   emptyDayText: {
-    fontSize: 13,
+    ...typography.caption,
     fontStyle: 'italic',
   },
+
+  // ── Meals List ─────────────────────────────────
   mealsList: {
-    padding: 12,
-    paddingTop: 4,
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   mealItem: {
-    borderLeftWidth: 4,
-    borderRadius: 8,
-    padding: 10,
+    borderLeftWidth: 3,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   mealContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  mealEmoji: {
-    fontSize: 24,
+    gap: spacing.md,
   },
   mealInfo: {
     flex: 1,
   },
   mealName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...typography.bodyBold,
   },
-  mealIngredients: {
-    fontSize: 12,
+  ingredientsList: {
+    ...typography.small,
     marginTop: 2,
   },
-  modal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+
+  // ── Modal ──────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    width: '85%',
-    borderRadius: 16,
-    padding: 20,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    textAlign: 'center',
+    ...typography.title,
+    marginBottom: spacing.lg,
   },
   modalInput: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    fontSize: 16,
-    marginBottom: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md + 2 : spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    ...typography.body,
+    marginBottom: spacing.lg,
   },
   modalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 10,
+    ...typography.caption,
+    marginBottom: spacing.md,
   },
-  mealTypeSelector: {
-    gap: 8,
-    marginBottom: 20,
+  mealTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
   mealTypeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 2,
-  },
-  mealTypeEmoji: {
-    fontSize: 22,
-    marginRight: 10,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
   },
   mealTypeLabel: {
-    fontSize: 15,
+    ...typography.caption,
     fontWeight: '600',
   },
-  modalButtons: {
+  modalActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: spacing.md,
   },
-  modalButton: {
+  modalCancelButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
   },
-  modalButtonText: {
-    color: 'white',
-    fontSize: 15,
-    fontWeight: '600',
+  modalCancelText: {
+    ...typography.button,
   },
-  ingredientsPreview: {
-    marginTop: 4,
+  modalSaveButton: {
+    flex: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    alignItems: 'center',
   },
-  ingredientsList: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  ingredientsMore: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
+  modalSaveText: {
+    ...typography.button,
   },
 });

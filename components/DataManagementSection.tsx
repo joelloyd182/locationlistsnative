@@ -3,7 +3,8 @@ import { useStores } from '../context/StoresContext';
 import { useMealPlan } from '../context/MealPlanContext';
 import { useTemplates } from '../context/TemplatesContext';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import * as Haptics from 'expo-haptics';
@@ -21,7 +22,7 @@ export function DataManagementSection() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
     try {
-      const exportData = {
+      const data = {
         version: '1.0',
         exportDate: new Date().toISOString(),
         stores: stores,
@@ -29,7 +30,7 @@ export function DataManagementSection() {
         templates: templates,
       };
 
-      const jsonString = JSON.stringify(exportData, null, 2);
+      const jsonString = JSON.stringify(data, null, 2);
       const fileName = `location-lists-backup-${new Date().toISOString().split('T')[0]}.json`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
@@ -75,7 +76,6 @@ export function DataManagementSection() {
                 return;
               }
 
-              // Import stores
               if (importedData.stores) {
                 for (const store of importedData.stores) {
                   const { id, ...storeData } = store;
@@ -88,7 +88,6 @@ export function DataManagementSection() {
                 }
               }
 
-              // Import meals
               if (importedData.meals) {
                 for (const meal of importedData.meals) {
                   const { id, ...mealData } = meal;
@@ -97,7 +96,6 @@ export function DataManagementSection() {
                 }
               }
 
-              // Import templates
               if (importedData.templates) {
                 for (const template of importedData.templates) {
                   const { id, ...templateData } = template;
@@ -122,8 +120,8 @@ export function DataManagementSection() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
     Alert.alert(
-      '⚠️ Delete ALL Data',
-      'This will permanently delete ALL stores, meals, and templates. This cannot be undone!\n\nType DELETE to confirm:',
+      'Delete ALL Data',
+      'This will permanently delete ALL stores, meals, and templates. This cannot be undone!',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -132,7 +130,7 @@ export function DataManagementSection() {
           onPress: () => {
             Alert.prompt(
               'Type DELETE',
-              'Type DELETE in all caps to confirm deletion:',
+              'Type DELETE in all caps to confirm:',
               [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -147,19 +145,16 @@ export function DataManagementSection() {
                     if (!user) return;
 
                     try {
-                      // Delete all stores
                       for (const store of stores) {
                         await deleteDoc(doc(db, 'stores', store.id));
                       }
 
-                      // Delete all meals
                       const mealsRef = collection(db, 'users', user.uid, 'meals');
                       const mealsSnapshot = await getDocs(mealsRef);
                       for (const mealDoc of mealsSnapshot.docs) {
                         await deleteDoc(mealDoc.ref);
                       }
 
-                      // Delete all templates
                       const templatesRef = collection(db, 'users', user.uid, 'mealTemplates');
                       const templatesSnapshot = await getDocs(templatesRef);
                       for (const templateDoc of templatesSnapshot.docs) {
@@ -185,36 +180,71 @@ export function DataManagementSection() {
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Data Management</Text>
-      
+      {/* Section Header */}
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionIconContainer, { backgroundColor: colors.primary + '12' }]}>
+          <Ionicons name="server-outline" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.sectionHeaderText}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Data Management</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Backup, restore, or reset your data
+          </Text>
+        </View>
+      </View>
+
+      {/* Export */}
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: colors.primary }]}
+        style={[styles.dataButton, elevation(2), { backgroundColor: colors.surface }]}
         onPress={exportData}
+        activeOpacity={0.7}
       >
-        <Text style={styles.buttonText}>📤 Export Data</Text>
-        <Text style={[styles.buttonSubtext, { color: 'rgba(255,255,255,0.8)' }]}>
-          Backup all stores, meals & templates
-        </Text>
+        <View style={[styles.dataButtonIcon, { backgroundColor: colors.primary + '12' }]}>
+          <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={styles.dataButtonContent}>
+          <Text style={[styles.dataButtonTitle, { color: colors.text }]}>Export Data</Text>
+          <Text style={[styles.dataButtonSubtitle, { color: colors.textSecondary }]}>
+            Backup stores, meals & templates
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
+      {/* Import */}
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: colors.success }]}
+        style={[styles.dataButton, elevation(2), { backgroundColor: colors.surface }]}
         onPress={importData}
+        activeOpacity={0.7}
       >
-        <Text style={styles.buttonText}>📥 Import Data</Text>
-        <Text style={[styles.buttonSubtext, { color: 'rgba(255,255,255,0.8)' }]}>
-          Restore from backup file
-        </Text>
+        <View style={[styles.dataButtonIcon, { backgroundColor: colors.success + '15' }]}>
+          <Ionicons name="cloud-download-outline" size={20} color={colors.success} />
+        </View>
+        <View style={styles.dataButtonContent}>
+          <Text style={[styles.dataButtonTitle, { color: colors.text }]}>Import Data</Text>
+          <Text style={[styles.dataButtonSubtitle, { color: colors.textSecondary }]}>
+            Restore from backup file
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
+      {/* Delete */}
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: colors.error }]}
+        style={[styles.dataButton, elevation(2), { backgroundColor: colors.surface }]}
         onPress={deleteAllData}
+        activeOpacity={0.7}
       >
-        <Text style={styles.buttonText}>🗑️ Delete All Data</Text>
-        <Text style={[styles.buttonSubtext, { color: 'rgba(255,255,255,0.8)' }]}>
-          Remove all stores, meals & templates
-        </Text>
+        <View style={[styles.dataButtonIcon, { backgroundColor: colors.errorLight }]}>
+          <Ionicons name="trash-outline" size={20} color={colors.error} />
+        </View>
+        <View style={styles.dataButtonContent}>
+          <Text style={[styles.dataButtonTitle, { color: colors.error }]}>Delete All Data</Text>
+          <Text style={[styles.dataButtonSubtitle, { color: colors.textSecondary }]}>
+            Remove everything permanently
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </TouchableOpacity>
     </View>
   );
@@ -222,25 +252,57 @@ export function DataManagementSection() {
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 20,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sectionIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderText: {
+    flex: 1,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 8,
+    ...typography.subtitle,
   },
-  button: {
-    padding: 16,
-    borderRadius: 12,
+  sectionSubtitle: {
+    ...typography.small,
+    marginTop: 1,
   },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+
+  // ── Data Buttons ───────────────────────────────
+  dataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    gap: spacing.md,
   },
-  buttonSubtext: {
-    fontSize: 13,
+  dataButtonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dataButtonContent: {
+    flex: 1,
+  },
+  dataButtonTitle: {
+    ...typography.bodyBold,
+  },
+  dataButtonSubtitle: {
+    ...typography.small,
+    marginTop: 2,
   },
 });

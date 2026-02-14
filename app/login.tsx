@@ -2,7 +2,10 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, Alert, KeyboardAvo
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'expo-router';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function LoginScreen() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
@@ -12,6 +15,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleAuth = async () => {
     if (!email.trim() || !password.trim()) {
@@ -27,7 +31,6 @@ export default function LoginScreen() {
       } else {
         await signIn(email, password);
       }
-      // Navigation happens automatically via auth state change
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {
@@ -36,152 +39,247 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <LinearGradient
+      colors={colors.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
     >
-      <View style={styles.content}>
-        <Text style={[styles.title, { color: colors.primary }]}>Location Lists</Text>
-        <Text style={[styles.subtitle, { color: colors.textLight }]}>
-          {isSignUp ? 'Create an account' : 'Sign in to continue'}
-        </Text>
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.content}>
+          {/* Logo / Title area */}
+          <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.titleSection}>
+            <View style={styles.logoContainer}>
+              <Ionicons name="location" size={36} color="#FFFFFF" />
+            </View>
+            <Text style={styles.appName}>Location Lists</Text>
+            <Text style={styles.tagline}>
+              {isSignUp ? 'Create your account' : 'Welcome back'}
+            </Text>
+          </Animated.View>
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-          placeholder="Email"
-          placeholderTextColor={colors.textLight}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-        />
+          {/* Form card */}
+          <Animated.View 
+            entering={FadeInDown.delay(200).duration(500)} 
+            style={[styles.formCard, elevation(4), { backgroundColor: colors.surface }]}
+          >
+            {/* Email */}
+            <View style={[styles.inputContainer, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight }]}>
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="Email"
+                placeholderTextColor={colors.textMuted}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+              />
+            </View>
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-          placeholder="Password"
-          placeholderTextColor={colors.textLight}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="password"
-        />
+            {/* Password */}
+            <View style={[styles.inputContainer, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight }]}>
+              <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
+              <TextInput
+                style={[styles.input, { color: colors.text }]}
+                placeholder="Password"
+                placeholderTextColor={colors.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons 
+                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={18} 
+                  color={colors.textMuted} 
+                />
+              </TouchableOpacity>
+            </View>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-          onPress={handleAuth}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
-          </Text>
-        </TouchableOpacity>
+            {/* Primary action */}
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: colors.primary }, loading && { opacity: 0.6 }]}
+              onPress={handleAuth}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.primaryButtonText, { color: colors.textInverse }]}>
+                {loading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => setIsSignUp(!isSignUp)}
-        >
-          <Text style={[styles.switchText, { color: colors.primary }]}>
-            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-          </Text>
-        </TouchableOpacity>
+            {/* Switch mode */}
+            <TouchableOpacity
+              style={styles.switchButton}
+              onPress={() => setIsSignUp(!isSignUp)}
+            >
+              <Text style={[styles.switchText, { color: colors.textSecondary }]}>
+                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                <Text style={{ color: colors.primary, fontWeight: '600' }}>
+                  {isSignUp ? 'Sign In' : 'Sign Up'}
+                </Text>
+              </Text>
+            </TouchableOpacity>
 
-        <View style={styles.divider}>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          <Text style={[styles.dividerText, { color: colors.textLight }]}>OR</Text>
-          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.textMuted }]}>or</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            </View>
+
+            {/* Google sign in */}
+            <TouchableOpacity
+              style={[styles.googleButton, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+              onPress={async () => {
+                setLoading(true);
+                try {
+                  await signInWithGoogle();
+                } catch (error: any) {
+                  Alert.alert('Error', error.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="logo-google" size={18} color={colors.text} />
+              <Text style={[styles.googleButtonText, { color: colors.text }]}>
+                Continue with Google
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Footer */}
+          <Animated.View entering={FadeInDown.delay(300).duration(500)}>
+            <Text style={styles.footer}>Kooky Rooster Media</Text>
+          </Animated.View>
         </View>
-
-        <TouchableOpacity
-          style={[styles.googleButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={async () => {
-            setLoading(true);
-            try {
-              await signInWithGoogle();
-            } catch (error: any) {
-              Alert.alert('Error', error.message);
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          <Text style={[styles.googleButtonText, { color: colors.text }]}>🔐 Sign in with Google</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: spacing.xl,
   },
-  title: {
+
+  // ── Title ──────────────────────────────────────
+  titleSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xxxl,
+  },
+  logoContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  appName: {
     fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 32,
+  tagline: {
+    ...typography.body,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: spacing.xs,
+  },
+
+  // ── Form Card ──────────────────────────────────
+  formCard: {
+    borderRadius: radius.xxl,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
+  },
+
+  // ── Inputs ─────────────────────────────────────
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   input: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    fontSize: 16,
-    marginBottom: 16,
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? spacing.md + 2 : spacing.md,
+    ...typography.body,
   },
-  button: {
-    padding: 16,
-    borderRadius: 12,
+
+  // ── Buttons ────────────────────────────────────
+  primaryButton: {
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: 'white',
+  primaryButtonText: {
+    ...typography.button,
     fontSize: 16,
-    fontWeight: '600',
   },
   switchButton: {
-    marginTop: 16,
-    padding: 8,
+    marginTop: spacing.lg,
+    alignItems: 'center',
   },
   switchText: {
-    textAlign: 'center',
-    fontSize: 14,
+    ...typography.body,
   },
+
+  // ── Divider ────────────────────────────────────
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: spacing.xl,
   },
   dividerLine: {
     flex: 1,
     height: 1,
   },
   dividerText: {
-    marginHorizontal: 16,
-    fontSize: 14,
+    marginHorizontal: spacing.lg,
+    ...typography.caption,
   },
+
+  // ── Google ─────────────────────────────────────
   googleButton: {
-    padding: 16,
-    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
+    justifyContent: 'center',
+    gap: spacing.md,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
+    borderWidth: 1,
   },
   googleButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.button,
+  },
+
+  // ── Footer ─────────────────────────────────────
+  footer: {
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.5)',
+    ...typography.small,
   },
 });

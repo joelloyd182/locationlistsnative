@@ -17,22 +17,27 @@ import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
 import { parseFirestoreError, showErrorAlert, withErrorHandling } from '../utils/errorHandling';
 
+export type StoreItem = {
+  id: string;
+  text: string;
+  checked: boolean;
+  price?: number;       // Manual price entry
+  quantity?: number;     // For future quantity tracking
+  note?: string;         // Optional note/details
+};
+
 export type Store = {
   id: string;
   name: string;
-  isOnline: boolean;  // NEW: Whether this is an online-only store
-  address?: string;   // Optional for online stores
-  location?: {        // Optional for online stores
+  isOnline: boolean;
+  address?: string;
+  location?: {
     lat: number;
     lng: number;
   };
-  triggerRadius?: number;  // Optional for online stores
-  website?: string;   // Recommended for online stores
-  items: Array<{
-    id: string;
-    text: string;
-    checked: boolean;
-  }>;
+  triggerRadius?: number;
+  website?: string;
+  items: StoreItem[];
   userId: string;
   members?: string[];
   placeId?: string;
@@ -53,9 +58,19 @@ type StoresContextType = {
   addItems: (storeId: string, itemTexts: string[]) => Promise<boolean>;
   toggleItem: (storeId: string, itemId: string) => Promise<boolean>;
   deleteItem: (storeId: string, itemId: string) => Promise<boolean>;
+  updateItem: (storeId: string, itemId: string, updates: Partial<StoreItem>) => Promise<boolean>;
+  clearCheckedItems: (storeId: string) => Promise<boolean>;
 };
 
 const StoresContext = createContext<StoresContextType | undefined>(undefined);
+
+/**
+ * Normalise item text for duplicate comparison.
+ * Lowercases and trims whitespace so "Cheese" matches "cheese" and " Cheese " matches "Cheese".
+ */
+function normalizeItemText(text: string): string {
+  return text.trim().toLowerCase();
+}
 
 export function StoresProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -101,7 +116,6 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
   // Sync stores to AsyncStorage for geofencing (only physical stores)
   useEffect(() => {
     if (stores.length > 0) {
-      // Filter to only physical stores for geofencing
       const physicalStores = stores.filter(s => !s.isOnline);
       syncStoresToCache(physicalStores);
     }
@@ -121,7 +135,7 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return docRef.id;
       },
       undefined,
-      () => addStore(storeData) // Retry function
+      () => addStore(storeData)
     );
 
     return result !== null;
@@ -138,7 +152,7 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => updateStore(id, updates) // Retry function
+      () => updateStore(id, updates)
     );
 
     return result !== null;
@@ -151,17 +165,32 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => deleteStore(id) // Retry function
+      () => deleteStore(id)
     );
 
     return result !== null;
   };
 
   const addItem = async (storeId: string, itemText: string): Promise<boolean> => {
+    // ── DUPLICATE CHECK ──
+    // If an unchecked item with the same text already exists, skip it
+    const store = stores.find(s => s.id === storeId);
+    if (store) {
+      const normalizedNew = normalizeItemText(itemText);
+      const duplicate = store.items.find(
+        i => !i.checked && normalizeItemText(i.text) === normalizedNew
+      );
+      if (duplicate) {
+        // Item already exists and isn't checked — no need to add again
+        console.log(`Skipping duplicate item: "${itemText}" (already in ${store.name})`);
+        return true; // Return true since the item is already there
+      }
+    }
+
     const result = await withErrorHandling(
       async () => {
         const storeRef = doc(db, 'stores', storeId);
-        const newItem = {
+        const newItem: StoreItem = {
           id: Date.now().toString(),
           text: itemText,
           checked: false,
@@ -174,17 +203,43 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => addItem(storeId, itemText) // Retry function
+      () => addItem(storeId, itemText)
     );
 
     return result !== null;
   };
 
   const addItems = async (storeId: string, itemTexts: string[]): Promise<boolean> => {
+    // ── DUPLICATE CHECK for bulk adds ──
+    // Filter out items that already exist (unchecked) in the store
+    const store = stores.find(s => s.id === storeId);
+    const existingTexts = new Set(
+      (store?.items || [])
+        .filter(i => !i.checked)
+        .map(i => normalizeItemText(i.text))
+    );
+    
+    const uniqueTexts = itemTexts.filter(text => {
+      const normalized = normalizeItemText(text);
+      if (existingTexts.has(normalized)) {
+        console.log(`Skipping duplicate: "${text}"`);
+        return false;
+      }
+      // Also deduplicate within the batch itself
+      if (existingTexts.has(normalized)) return false;
+      existingTexts.add(normalized);
+      return true;
+    });
+
+    if (uniqueTexts.length === 0) {
+      console.log('All items already exist, nothing to add');
+      return true;
+    }
+
     const result = await withErrorHandling(
       async () => {
         const storeRef = doc(db, 'stores', storeId);
-        const newItems = itemTexts.map(text => ({
+        const newItems: StoreItem[] = uniqueTexts.map(text => ({
           id: `${Date.now()}-${Math.random()}`,
           text,
           checked: false,
@@ -197,7 +252,7 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => addItems(storeId, itemTexts) // Retry function
+      () => addItems(storeId, itemTexts)
     );
 
     return result !== null;
@@ -226,7 +281,7 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => toggleItem(storeId, itemId) // Retry function
+      () => toggleItem(storeId, itemId)
     );
 
     return result !== null;
@@ -249,7 +304,67 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         return true;
       },
       undefined,
-      () => deleteItem(storeId, itemId) // Retry function
+      () => deleteItem(storeId, itemId)
+    );
+
+    return result !== null;
+  };
+
+  // NEW: Update an item's metadata (price, note, quantity)
+  const updateItem = async (storeId: string, itemId: string, updates: Partial<StoreItem>): Promise<boolean> => {
+    const store = stores.find(s => s.id === storeId);
+    if (!store) return false;
+
+    const item = store.items.find(i => i.id === itemId);
+    if (!item) return false;
+
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        const updatedItem = { ...item, ...updates };
+        
+        // Remove old, add updated
+        await updateDoc(storeRef, {
+          items: arrayRemove(item),
+        });
+        
+        await updateDoc(storeRef, {
+          items: arrayUnion(updatedItem),
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => updateItem(storeId, itemId, updates)
+    );
+
+    return result !== null;
+  };
+
+  // NEW: Clear all checked items from a store in one batch
+  const clearCheckedItems = async (storeId: string): Promise<boolean> => {
+    const store = stores.find(s => s.id === storeId);
+    if (!store) return false;
+
+    const checkedItems = store.items.filter(i => i.checked);
+    if (checkedItems.length === 0) return true;
+
+    const result = await withErrorHandling(
+      async () => {
+        const storeRef = doc(db, 'stores', storeId);
+        // Remove all checked items in one update
+        for (const item of checkedItems) {
+          await updateDoc(storeRef, {
+            items: arrayRemove(item),
+          });
+        }
+        await updateDoc(storeRef, {
+          updatedAt: Timestamp.now(),
+        });
+        return true;
+      },
+      undefined,
+      () => clearCheckedItems(storeId)
     );
 
     return result !== null;
@@ -267,7 +382,9 @@ export function StoresProvider({ children }: { children: React.ReactNode }) {
         addItem,
         addItems,
         toggleItem, 
-        deleteItem 
+        deleteItem,
+        updateItem,
+        clearCheckedItems,
       }}
     >
       {children}

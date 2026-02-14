@@ -1,18 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { useTheme } from '../context/ThemeContext';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
+import { useTheme, elevation, spacing, radius, typography } from '../context/ThemeContext';
 import { useMealPlan } from '../context/MealPlanContext';
 import { useStores } from '../context/StoresContext';
 import { detectIngredientEmoji } from '../utils/emoji-detector';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import StoreLogo from './StoreLogo';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 type WeeklyGroceryModalProps = {
   visible: boolean;
@@ -25,10 +20,8 @@ export function WeeklyGroceryModal({ visible, onClose, weekStart }: WeeklyGrocer
   const { meals } = useMealPlan();
   const { stores, addItems } = useStores();
   
-  // Track which ingredients are selected
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
-  // Get all unique ingredients for the week
   const { allIngredients, mealCount } = useMemo(() => {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
@@ -47,15 +40,11 @@ export function WeeklyGroceryModal({ visible, onClose, weekStart }: WeeklyGrocer
 
     const sorted = Array.from(ingredientsSet).sort();
     
-    // Initially select all ingredients
     if (selectedIngredients.size === 0 && sorted.length > 0) {
       setSelectedIngredients(new Set(sorted));
     }
 
-    return {
-      allIngredients: sorted,
-      mealCount: weekMeals.length
-    };
+    return { allIngredients: sorted, mealCount: weekMeals.length };
   }, [weekStart, meals]);
 
   const toggleIngredient = (ingredient: string) => {
@@ -88,7 +77,6 @@ export function WeeklyGroceryModal({ visible, onClose, weekStart }: WeeklyGrocer
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
     const success = await addItems(storeId, selectedList);
     
     if (success) {
@@ -96,7 +84,7 @@ export function WeeklyGroceryModal({ visible, onClose, weekStart }: WeeklyGrocer
       Alert.alert(
         'Added to Store!',
         `${selectedList.length} items added to your shopping list`,
-        [{ text: 'OK', onPress: onClose }]
+        [{ text: 'OK', onPress: handleClose }]
       );
     } else {
       Alert.alert('Error', 'Failed to add items to store');
@@ -104,230 +92,274 @@ export function WeeklyGroceryModal({ visible, onClose, weekStart }: WeeklyGrocer
   };
 
   const handleClose = () => {
-    setSelectedIngredients(new Set()); // Reset selections
+    setSelectedIngredients(new Set());
     onClose();
   };
 
-  if (allIngredients.length === 0) {
-    return (
-      <Modal visible={visible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Weekly Grocery List</Text>
-            
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: colors.textLight }]}>
-                No meals planned this week
-              </Text>
-              <Text style={[styles.emptySubtext, { color: colors.textLight }]}>
-                Add some meals to generate your grocery list!
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.closeButton, { backgroundColor: colors.textLight }]}
-              onPress={handleClose}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Weekly Grocery List</Text>
-          <Text style={[styles.subtitle, { color: colors.textLight }]}>
-            {mealCount} meals • {selectedIngredients.size} of {allIngredients.length} items selected
-          </Text>
-
-          {/* Select All / Deselect All */}
-          <View style={styles.bulkActions}>
-            <TouchableOpacity
-              style={[styles.bulkButton, { backgroundColor: colors.success }]}
-              onPress={selectAll}
-            >
-              <Text style={styles.bulkButtonText}>✓ Select All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.bulkButton, { backgroundColor: colors.error }]}
-              onPress={deselectAll}
-            >
-              <Text style={styles.bulkButtonText}>✗ Deselect All</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Ingredients List with Checkboxes */}
-          <ScrollView style={styles.ingredientsList} showsVerticalScrollIndicator={false}>
-            {allIngredients.map((ingredient, index) => {
-              const isSelected = selectedIngredients.has(ingredient);
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.ingredientItem,
-                    { 
-                      backgroundColor: isSelected ? colors.tertiary : colors.background,
-                      borderColor: isSelected ? colors.primary : colors.border
-                    }
-                  ]}
-                  onPress={() => toggleIngredient(ingredient)}
-                >
-                  <View style={[
-                    styles.checkbox,
-                    { borderColor: colors.border },
-                    isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
-                  ]}>
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                  <Text style={[
-                    styles.ingredientText,
-                    { color: colors.text },
-                    !isSelected && { opacity: 0.5 }
-                  ]}>
-                    {detectIngredientEmoji(ingredient)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Store Buttons */}
-          <Text style={[styles.sectionLabel, { color: colors.text }]}>Send to Store:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storesScroll}>
-            {stores.map(store => (
-              <TouchableOpacity
-                key={store.id}
-                style={[styles.storeButton, { backgroundColor: colors.primary }]}
-                onPress={() => handleSendToStore(store.id)}
-              >
-                <Text style={styles.storeButtonText}>🏪 {store.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: colors.textLight }]}
-            onPress={handleClose}
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+      <TouchableOpacity 
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        activeOpacity={1}
+        onPress={handleClose}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+          <Animated.View 
+            entering={FadeIn.duration(200)}
+            style={[styles.content, elevation(4), { backgroundColor: colors.surface }]}
           >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            <View style={styles.handle} />
+
+            <Text style={[styles.title, { color: colors.text }]}>Weekly Grocery List</Text>
+
+            {allIngredients.length === 0 ? (
+              <>
+                <View style={styles.emptyState}>
+                  <View style={[styles.emptyIcon, { backgroundColor: colors.primary + '12' }]}>
+                    <Ionicons name="cart-outline" size={32} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>No meals planned</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                    Add some meals to generate your grocery list
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.closeButton, { borderColor: colors.border }]}
+                  onPress={handleClose}
+                >
+                  <Text style={[styles.closeButtonText, { color: colors.textSecondary }]}>Close</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+                  {mealCount} meal{mealCount !== 1 ? 's' : ''} · {selectedIngredients.size} of {allIngredients.length} selected
+                </Text>
+
+                {/* Bulk actions */}
+                <View style={styles.bulkActions}>
+                  <TouchableOpacity
+                    style={[styles.bulkButton, { backgroundColor: colors.primary + '10' }]}
+                    onPress={selectAll}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="checkmark-done" size={16} color={colors.primary} />
+                    <Text style={[styles.bulkButtonText, { color: colors.primary }]}>All</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.bulkButton, { backgroundColor: colors.error + '10' }]}
+                    onPress={deselectAll}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close" size={16} color={colors.error} />
+                    <Text style={[styles.bulkButtonText, { color: colors.error }]}>None</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Ingredients */}
+                <ScrollView style={styles.ingredientsList} showsVerticalScrollIndicator={false}>
+                  {allIngredients.map((ingredient, index) => {
+                    const isSelected = selectedIngredients.has(ingredient);
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.ingredientRow,
+                          { borderBottomColor: colors.borderLight },
+                          isSelected && { backgroundColor: colors.primary + '06' },
+                        ]}
+                        onPress={() => toggleIngredient(ingredient)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[
+                          styles.checkbox,
+                          { borderColor: isSelected ? colors.primary : colors.border },
+                          isSelected && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}>
+                          {isSelected && <Ionicons name="checkmark" size={14} color={colors.textInverse} />}
+                        </View>
+                        <Text style={[
+                          styles.ingredientText,
+                          { color: isSelected ? colors.text : colors.textMuted },
+                        ]}>
+                          {detectIngredientEmoji(ingredient)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Send to store */}
+                <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>SEND TO STORE</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storesScroll}>
+                  {stores.map(store => (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={[styles.storeChip, elevation(1), { backgroundColor: colors.surface }]}
+                      onPress={() => handleSendToStore(store.id)}
+                      activeOpacity={0.7}
+                    >
+                      <StoreLogo
+                        website={store.website}
+                        storeName={store.name}
+                        isOnline={store.isOnline}
+                        size={28}
+                        backgroundColor={colors.primary + '12'}
+                        iconColor={colors.primary}
+                        borderRadius={6}
+                      />
+                      <Text style={[styles.storeChipText, { color: colors.text }]} numberOfLines={1}>
+                        {store.name}
+                      </Text>
+                      <Ionicons name="arrow-forward" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <TouchableOpacity
+                  style={[styles.closeButton, { borderColor: colors.border }]}
+                  onPress={handleClose}
+                >
+                  <Text style={[styles.closeButtonText, { color: colors.textSecondary }]}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+  content: {
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    padding: spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
     maxHeight: '85%',
   },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...typography.title,
   },
   subtitle: {
-    fontSize: 14,
-    marginBottom: 16,
+    ...typography.small,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
   },
+
+  // ── Empty ──────────────────────────────────────
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxxl,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: {
+    ...typography.subtitle,
+    marginBottom: spacing.sm,
+  },
+  emptySubtitle: {
+    ...typography.body,
+    textAlign: 'center',
+  },
+
+  // ── Bulk Actions ───────────────────────────────
   bulkActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   bulkButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  bulkButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  ingredientsList: {
-    maxHeight: 300,
-    marginBottom: 16,
-  },
-  ingredientItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 2,
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.full,
+  },
+  bulkButtonText: {
+    ...typography.caption,
+    fontWeight: '600',
+  },
+
+  // ── Ingredients ────────────────────────────────
+  ingredientsList: {
+    maxHeight: 260,
+    marginBottom: spacing.lg,
+  },
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderBottomWidth: 1,
+    gap: spacing.md,
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkmark: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-  },
   ingredientText: {
-    fontSize: 15,
+    ...typography.body,
     flex: 1,
   },
+
+  // ── Store Chips ────────────────────────────────
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
+    ...typography.small,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
   },
   storesScroll: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
-  storeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 10,
-    marginRight: 10,
+  storeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.lg,
+    marginRight: spacing.sm,
   },
-  storeButtonText: {
-    color: 'white',
-    fontSize: 15,
+  storeChipText: {
+    ...typography.caption,
     fontWeight: '600',
+    maxWidth: 100,
   },
+
+  // ── Close ──────────────────────────────────────
   closeButton: {
-    padding: 16,
-    borderRadius: 10,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
   },
   closeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
+    ...typography.button,
   },
 });
